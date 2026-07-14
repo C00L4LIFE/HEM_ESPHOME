@@ -14,13 +14,16 @@ configuration YAML avec intégration Home Assistant native.
 | Périphérique | Bus | Pins ESP32 |
 |---|---|---|
 | MPPT eSmart3 | RS485 (9600 8N1) | RX 16 / TX 17 / DE 4 |
-| JK BMS | RS485 (115200, trames 0x4E 0x57) | RX 18 / TX 19 / DE 23 |
 | 2× PZEM-004T v3 | Modbus RTU (9600) | RX 13 / TX 14 — adr. 1 (conso AC), adr. 2 (secteur) |
 | JBD BMS (Xiaoxiang) | BLE | MAC dans `secrets.yaml` |
 | RTC DS3231 | I2C | SDA 21 / SCL 22 |
 | 4 relais (actifs bas) | GPIO | 25, 26, 27, 32 |
 | 4 entrées | GPIO | 33 (pull-up), 34/35/36 (pull-up externe requis) |
 | LED statut | GPIO | 2 |
+
+Le JK BMS n'est **pas** géré par ce device : l'ESP32 classique n'a que 3 UART
+matériels (logger + PZEM + eSmart3 les occupent déjà) et le JK BMS est déjà
+suivi par un device ESP32 séparé (`jk-bms` / esp32-ble-v19-dual_bms.yaml).
 
 ## Structure
 
@@ -34,7 +37,6 @@ packages/
   gpio.yaml                   4 relais + 4 entrées
   pzem.yaml                   2× PZEM-004T v3 (pzemac natif)
   mppt_esmart3.yaml           MPPT eSmart3 (composant custom)
-  jk_bms.yaml                 JK BMS RS485 (syssi/esphome-jk-bms)
   jbd_bms_ble.yaml            JBD BMS BLE (syssi/esphome-jbd-bms)
   battery_protection.yaml     Protection batterie automatique
   energy.yaml                 Puissance maison, temps restant estimé...
@@ -158,7 +160,7 @@ complète des capteurs, `number` et `switch` disponibles.
 | `ha_manager.cpp` | `api:` native (MQTT en option, voir mqtt.yaml) |
 | `ota_manager.cpp` | `ota:` + `safe_mode:` |
 | `mppt_manager.cpp` + Joba_ESmart3 | `components/esmart3` (custom) |
-| `jk_bms.cpp` | `syssi/esphome-jk-bms` (jk_modbus RS485) |
+| `jk_bms.cpp` | non porté — géré par un device ESP32 séparé (`jk-bms`) |
 | `ble_battery.cpp` | `syssi/esphome-jbd-bms` (BLE) |
 | `pzem_manager.cpp` | `pzemac` natif ×2 |
 | `gpio_manager.cpp` | `switch: gpio` ×4 + `binary_sensor: gpio` ×4 |
@@ -167,8 +169,8 @@ complète des capteurs, `number` et `switch` disponibles.
 
 ## Limitations / différences
 
-- **JK BMS multi-unités** : le composant syssi ne gère qu'un seul BMS par bus
-  RS485 (le projet d'origine supportait l'adressage multi-drop).
+- **JK BMS** : non géré par ce device (voir plus haut) — l'ESP32 classique
+  n'a que 3 UART matériels, déjà occupés par le logger, PZEM et eSmart3.
 - **Température du DS3231** : non exposée (le composant `ds1307` ne la lit pas).
 - **Historique eSmart3 31 j / 12 mois** (`EngSave`) : non porté — Home
   Assistant historise déjà les capteurs d'énergie.

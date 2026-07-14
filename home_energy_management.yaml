@@ -6,7 +6,6 @@
 # Matériel :
 #   - ESP32 DevKit (esp32dev)
 #   - MPPT eSmart3 sur RS485        (RX 16 / TX 17 / DE 4)
-#   - JK BMS sur RS485              (RX 18 / TX 19 / DE 23)
 #   - 2x PZEM-004T v3 sur Modbus    (RX 13 / TX 14, adresses 1 et 2)
 #   - JBD BMS via BLE               (adresse MAC dans secrets.yaml)
 #   - RTC DS3231 sur I2C            (SDA 21 / SCL 22)
@@ -23,9 +22,6 @@ substitutions:
   mppt_de_pin: "4"
   pzem_rx_pin: "13"
   pzem_tx_pin: "14"
-  jk_rx_pin: "18"
-  jk_tx_pin: "19"
-  jk_de_pin: "23"
   i2c_sda_pin: "21"
   i2c_scl_pin: "22"
   relay_1_pin: "25"
@@ -55,14 +51,14 @@ esp32:
     type: esp-idf
 
 # Composant custom eSmart3 (portage du protocole Joba_ESmart3)
-# + composants syssi pour JK BMS (RS485) et JBD BMS (BLE)
-# Les trois sont récupérés depuis GitHub (comme pour dual BMS) : ce fichier
-# et secrets.yaml suffisent, pas besoin de cloner packages/ ni components/.
+# + composant syssi pour JBD BMS (BLE)
+# Les deux sont récupérés depuis GitHub : ce fichier et secrets.yaml
+# suffisent, pas besoin de cloner packages/ ni components/.
+# Note : le JK BMS est géré par un device ESP32 dédié séparé (jk-bms /
+# esp32-ble-v19-dual_bms.yaml), pas par celui-ci.
 external_components:
   - source: github://C00L4LIFE/HEM_ESPHOME@main
     components: [esmart3]
-    refresh: 1d
-  - source: github://syssi/esphome-jk-bms@main
     refresh: 1d
   - source: github://syssi/esphome-jbd-bms@main
     refresh: 1d
@@ -83,15 +79,12 @@ packages:
       - packages/gpio.yaml
       - packages/pzem.yaml
       - packages/mppt_esmart3.yaml
-      - packages/jk_bms.yaml
       - packages/jbd_bms_ble.yaml
       - packages/battery_protection.yaml
       - packages/energy.yaml
 
 logger:
   level: INFO
-  # ESP32 = 3 UART matériels, tous utilisés (PZEM, eSmart3, JK BMS).
-  # Le projet d'origine utilisait SoftwareSerial pour le MPPT ; ESPHome n'en a
-  # pas, donc on libère UART0 en désactivant le log série. Les logs restent
-  # visibles via MQTT (topic <nom>/debug) et l'interface web.
-  baud_rate: 0
+  # ESP32 = 3 UART matériels : UART0 (logger, ce port série) + PZEM + eSmart3.
+  # Ça tient tout juste (retrait de JK BMS, géré par un device séparé, qui
+  # aurait nécessité un 4e UART).
