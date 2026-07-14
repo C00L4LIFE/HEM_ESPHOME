@@ -2,8 +2,12 @@
 # Capteurs dérivés (calculs de main.cpp / ha_manager.cpp) :
 #   - puissance maison = PV - charge batterie
 #   - puissance batterie moyennée (25 échantillons de 5 s, ~2 min)
-#   - énergie restante batterie (Wh)
+#   - énergie restante / nominale batterie (Wh)
 #   - temps restant estimé (min ; négatif = temps de charge)
+#   - énergie batterie chargée/déchargée cumulée (kWh, tableau de bord
+#     Énergie de Home Assistant) : le composant jbd_bms_ble ne fournit que
+#     des puissances instantanées, pas de compteur kWh natif ; on intègre
+#     charging_power/discharging_power dans le temps (platform: integration).
 # =============================================================================
 
 sensor:
@@ -38,7 +42,25 @@ sensor:
       float bat = id(jbd_power).state;   // + = charge batterie
       if (isnan(pv)) return {};
       if (isnan(bat)) bat = 0;
-      return pv - bat;
+      float p = pv - bat;
+      // Clampé à 0 : un écart de mesure peut donner une valeur légèrement
+      // négative, mais une "puissance maison" n'a pas de sens physique < 0
+      // (et l'intégration en énergie cumulée ci-dessous exige une source >= 0).
+      return p < 0 ? 0 : p;
+
+  # Énergie maison cumulée (kWh), équivalent house_energy de ha_manager.cpp.
+  - platform: integration
+    name: "Maison Énergie"
+    id: house_energy
+    sensor: house_power
+    time_unit: h
+    restore: true
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: kWh
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
 
   # Énergie restante batterie en Wh (capacité restante Ah x tension)
   - platform: template
@@ -53,6 +75,50 @@ sensor:
       float v = id(jbd_voltage).state;
       if (isnan(ah) || isnan(v)) return {};
       return ah * v;
+
+  # Énergie nominale batterie en Wh (capacité nominale Ah x tension),
+  # équivalent battery_nominal_energy de ha_manager.cpp
+  - platform: template
+    name: "Batterie Énergie nominale"
+    id: battery_nominal_energy_wh
+    unit_of_measurement: Wh
+    device_class: energy_storage
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      float ah = id(jbd_nominal_capacity).state;
+      float v = id(jbd_voltage).state;
+      if (isnan(ah) || isnan(v)) return {};
+      return ah * v;
+
+  # Énergie batterie chargée/déchargée cumulée (kWh) - compatible tableau de
+  # bord Énergie de Home Assistant. Intégration temporelle de la puissance
+  # (W) en Wh (time_unit: h) puis conversion en kWh (filtre multiply).
+  # restore: true pour ne pas repartir de zéro à chaque redémarrage.
+  - platform: integration
+    name: "Batterie Énergie chargée"
+    id: battery_energy_charged
+    sensor: jbd_charging_power
+    time_unit: h
+    restore: true
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: kWh
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+  - platform: integration
+    name: "Batterie Énergie déchargée"
+    id: battery_energy_discharged
+    sensor: jbd_discharging_power
+    time_unit: h
+    restore: true
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: kWh
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
 
   # Temps restant estimé (minutes) - formule du main.cpp :
   #   décharge : réserve de 20 Ah conservée si capacité > 20 Ah

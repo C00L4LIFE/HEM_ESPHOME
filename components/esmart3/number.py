@@ -60,20 +60,22 @@ def minutes_schema():
 
 
 # clé -> (purpose côté C++ (ESmart3Component::PendingKind), min, max, step, schéma)
-# Bornes reprises de la doc Joba_ESmart3 (defaults typiques 12V/24V lead-acid) avec marge.
+# Bornes élargies jusqu'à un système 48V (facteur x4 appliqué côté C++ sur
+# les valeurs "base 12V" du contrôleur, voir ESmart3Component::set_system_voltage_mode) :
+# la valeur affichée/saisie ici est toujours la tension réelle du système.
 NUMBERS = {
     CONF_MAX_CHARGE_CURRENT: (1, 0.0, 60.0, 0.1, current_schema),
     CONF_MAX_LOAD_CURRENT: (2, 0.0, 40.0, 0.1, current_schema),
-    CONF_BULK_VOLTAGE: (4, 8.0, 32.0, 0.1, voltage_schema),
-    CONF_FLOAT_VOLTAGE: (5, 8.0, 32.0, 0.1, voltage_schema),
-    CONF_EQUALIZE_VOLTAGE: (6, 8.0, 32.0, 0.1, voltage_schema),
+    CONF_BULK_VOLTAGE: (4, 8.0, 65.0, 0.1, voltage_schema),
+    CONF_FLOAT_VOLTAGE: (5, 8.0, 65.0, 0.1, voltage_schema),
+    CONF_EQUALIZE_VOLTAGE: (6, 8.0, 65.0, 0.1, voltage_schema),
     CONF_EQUALIZE_TIME: (7, 0.0, 180.0, 1.0, minutes_schema),
-    CONF_LOAD_OVP: (9, 8.0, 35.0, 0.1, voltage_schema),
-    CONF_LOAD_UVP: (10, 5.0, 20.0, 0.1, voltage_schema),
-    CONF_BATTERY_OVP: (11, 8.0, 35.0, 0.1, voltage_schema),
-    CONF_BATTERY_OVP_RECOVER: (12, 8.0, 35.0, 0.1, voltage_schema),
-    CONF_BATTERY_UVP: (13, 5.0, 20.0, 0.1, voltage_schema),
-    CONF_BATTERY_UVP_RECOVER: (14, 5.0, 20.0, 0.1, voltage_schema),
+    CONF_LOAD_OVP: (9, 8.0, 75.0, 0.1, voltage_schema),
+    CONF_LOAD_UVP: (10, 5.0, 50.0, 0.1, voltage_schema),
+    CONF_BATTERY_OVP: (11, 8.0, 75.0, 0.1, voltage_schema),
+    CONF_BATTERY_OVP_RECOVER: (12, 8.0, 75.0, 0.1, voltage_schema),
+    CONF_BATTERY_UVP: (13, 5.0, 50.0, 0.1, voltage_schema),
+    CONF_BATTERY_UVP_RECOVER: (14, 5.0, 50.0, 0.1, voltage_schema),
 }
 
 CONFIG_SCHEMA = ESMART3_COMPONENT_SCHEMA.extend(

@@ -69,6 +69,12 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   void set_battery_uvp(float volts);
   void set_battery_uvp_recover(float volts);
 
+  // Facteur d'échelle tension système (le contrôleur stocke les tensions de
+  // config en base 12V ; ex. bulk_voltage lu=14.4 sur un système 24V => 28.8V
+  // réel). mode : 0=Auto (détecté depuis la tension batterie), 1=12V, 2=24V,
+  // 3=36V, 4=48V (facteur = mode directement en mode manuel).
+  void set_system_voltage_mode(uint8_t mode);
+
 #ifdef USE_SENSOR
   void set_pv_voltage_sensor(sensor::Sensor *s) { this->pv_voltage_sensor_ = s; }
   void set_pv_current_sensor(sensor::Sensor *s) { this->pv_current_sensor_ = s; }
@@ -98,6 +104,7 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   void set_max_discharge_current_sensor(sensor::Sensor *s) { this->max_discharge_current_sensor_ = s; }
   void set_battery_ovp_sensor(sensor::Sensor *s) { this->battery_ovp_sensor_ = s; }
   void set_battery_uvp_sensor(sensor::Sensor *s) { this->battery_uvp_sensor_ = s; }
+  void set_system_voltage_sensor(sensor::Sensor *s) { this->system_voltage_sensor_ = s; }
 #endif
 #ifdef USE_BINARY_SENSOR
   void set_online_status_binary_sensor(binary_sensor::BinarySensor *b) { this->online_binary_sensor_ = b; }
@@ -211,6 +218,8 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   bool info_read_{false};
   bool force_batparam_{false};
   bool force_proparam_{false};
+  uint8_t system_voltage_mode_{0};       // 0=Auto, 1..4 = 12V/24V/36V/48V
+  float system_voltage_factor_{1.0f};    // multiplicateur appliqué aux tensions BatParam/ProParam
 
   // File des écritures en attente (appliquées dès que le bus est libre, une à la fois)
   std::vector<PendingWrite> pending_queue_;
@@ -244,6 +253,7 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   sensor::Sensor *max_discharge_current_sensor_{nullptr};
   sensor::Sensor *battery_ovp_sensor_{nullptr};
   sensor::Sensor *battery_uvp_sensor_{nullptr};
+  sensor::Sensor *system_voltage_sensor_{nullptr};
 #endif
 #ifdef USE_BINARY_SENSOR
   binary_sensor::BinarySensor *online_binary_sensor_{nullptr};

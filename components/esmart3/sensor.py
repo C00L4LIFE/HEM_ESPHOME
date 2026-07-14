@@ -53,6 +53,7 @@ CONF_MAX_CHARGE_CURRENT = "max_charge_current"
 CONF_MAX_DISCHARGE_CURRENT = "max_discharge_current"
 CONF_BATTERY_OVP = "battery_ovp"
 CONF_BATTERY_UVP = "battery_uvp"
+CONF_SYSTEM_VOLTAGE = "system_voltage"
 
 
 def voltage_schema():
@@ -153,6 +154,12 @@ SENSORS = {
     CONF_MAX_DISCHARGE_CURRENT: current_schema(),
     CONF_BATTERY_OVP: voltage_schema(),
     CONF_BATTERY_UVP: voltage_schema(),
+    CONF_SYSTEM_VOLTAGE: sensor.sensor_schema(
+        unit_of_measurement=UNIT_VOLT,
+        accuracy_decimals=0,
+        device_class=DEVICE_CLASS_VOLTAGE,
+        icon="mdi:flash-triangle",
+    ),
 }
 
 CONFIG_SCHEMA = ESMART3_COMPONENT_SCHEMA.extend(

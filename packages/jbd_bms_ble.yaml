@@ -18,6 +18,12 @@ jbd_bms_ble:
     update_interval: 2s
 
 sensor:
+  # Force du signal BLE (équivalent battery_signal de ha_manager.cpp)
+  - platform: ble_client
+    ble_client_id: jbd_client
+    type: rssi
+    name: "Batterie Signal BLE"
+
   - platform: jbd_bms_ble
     jbd_bms_ble_id: jbd_bms0
     total_voltage:
@@ -29,6 +35,15 @@ sensor:
     power:
       name: "Batterie Puissance"
       id: jbd_power
+    charging_power:
+      name: "Batterie Puissance de charge"
+      id: jbd_charging_power
+    discharging_power:
+      name: "Batterie Puissance de décharge"
+      id: jbd_discharging_power
+    battery_cycle_capacity:
+      name: "Batterie Capacité cyclée cumulée"
+      id: jbd_cycle_capacity
     state_of_charge:
       name: "Batterie SoC"
       id: jbd_soc

@@ -57,8 +57,13 @@ sensor:
       id: mppt_load_power
     co2_saved:
       name: "MPPT CO2 économisé"
+    # Nombre de défauts actifs en ce moment (0 = OK). Détail des défauts
+    # (noms) dans le text_sensor "MPPT Défauts" plus bas.
     fault_count:
-      name: "MPPT Nombre de défauts"
+      name: "MPPT Nombre de défauts actifs"
+    system_voltage:
+      name: "MPPT Tension système détectée"
+      id: mppt_system_voltage
     energy_today:
       name: "MPPT Énergie aujourd'hui"
       id: mppt_energy_today
@@ -148,6 +153,37 @@ select:
     esmart3_id: esmart3_hub
     battery_type:
       name: "MPPT Type de batterie"
+
+  # Le contrôleur stocke les tensions de config (Bulk/Float/Égalisation,
+  # OVP/UVP) en base 12V ; ce sélecteur pilote le facteur d'échelle appliqué
+  # côté firmware (voir ESmart3Component::set_system_voltage_mode) pour que
+  # les number/sensor ci-dessus affichent/acceptent la tension réelle du
+  # système. "Auto" détecte le facteur depuis la tension batterie mesurée
+  # (bandes 10-15V/20-30V/32-38V/40-60V) ; en cas d'ambiguïté, sélectionner
+  # manuellement.
+  - platform: template
+    name: "MPPT Tension système"
+    id: mppt_system_voltage_mode
+    optimistic: true
+    restore_value: true
+    initial_option: "Auto"
+    entity_category: config
+    icon: "mdi:flash-triangle-outline"
+    options:
+      - "Auto"
+      - "12V"
+      - "24V"
+      - "36V"
+      - "48V"
+    set_action:
+      - lambda: |-
+          uint8_t mode = 0;
+          if (x == "12V") mode = 1;
+          else if (x == "24V") mode = 2;
+          else if (x == "36V") mode = 3;
+          else if (x == "48V") mode = 4;
+          id(esmart3_hub).set_system_voltage_mode(mode);
+          id(mppt_system_voltage_mode).publish_state(x);
 
 switch:
   - platform: esmart3

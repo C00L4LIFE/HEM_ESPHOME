@@ -43,7 +43,7 @@ packages/
   mppt_esmart3.yaml           MPPT eSmart3 (composant custom)
   jbd_bms_ble.yaml            JBD BMS BLE (syssi/esphome-jbd-bms)
   battery_protection.yaml     Protection batterie automatique
-  energy.yaml                 Puissance maison, temps restant estimé...
+  energy.yaml                 Puissance maison, énergie batterie (kWh), temps restant estimé...
 components/
   esmart3/                    Composant externe custom (protocole Joba_ESmart3)
 ```
@@ -67,6 +67,32 @@ Chaque paramètre écriture est aussi disponible en `sensor` lecture seule
 (suffixe "(lu)") pour historiser sa valeur sans dépendre de l'état d'un
 `number`. Les écritures sont mises en file (une par transaction RS485) et
 relues automatiquement après confirmation (ACK) pour rafraîchir l'affichage.
+
+### Mise à l'échelle tension système (12/24/36/48V)
+
+Le contrôleur stocke les tensions de config (Bulk/Float/Égalisation, Load et
+Batterie OVP/UVP) en **base 12V**, quel que soit le système réel (un système
+24V lit par ex. bulk=14.4 pour une tension réelle de 28.8V). Le `select`
+**MPPT Tension système** (Auto/12V/24V/36V/48V) pilote un facteur d'échelle
+appliqué automatiquement en lecture (multiplie) et en écriture (divise) sur
+ces paramètres, pour que les `number`/`sensor` affichent et acceptent
+toujours la tension réelle. En mode **Auto** (par défaut), le facteur est
+déduit de la tension batterie mesurée (bandes 10-15V/20-30V/32-38V/40-60V) ;
+le facteur retenu est visible via **MPPT Tension système détectée**. Ce
+réglage est persistant (redémarrage).
+
+## Capteurs d'énergie batterie
+
+Le composant `jbd_bms_ble` ne fournit que des puissances instantanées
+(`power`, `charging_power`, `discharging_power`), pas de compteur kWh natif.
+`packages/energy.yaml` ajoute donc, via `sensor: platform: integration`
+(intégration temporelle de la puissance) :
+- **Batterie Énergie chargée** / **déchargée** (kWh, `total_increasing`,
+  persistantes au redémarrage) — compatibles avec le tableau de bord
+  **Énergie** de Home Assistant
+- **Batterie Énergie restante** / **nominale** (Wh, capacité × tension)
+- **Maison Énergie** (kWh, même principe, intégration de la puissance maison)
+- **Batterie Signal BLE** (RSSI, via `ble_client`)
 
 ## Protection batterie
 
@@ -207,6 +233,31 @@ complète des capteurs, `number` et `switch` disponibles.
   est appliqué via un filtre sur le capteur `MPPT Courant de charge`.
 - **Watchdog BLE** : non activé par défaut (le `ble_client` se reconnecte
   seul ; un reboot périodique bootloopait si la MAC n'est pas configurée).
+- **Comptage d'équilibrage cellules** (`battery_balance_count` d'origine) :
+  non porté en tant que compteur numérique — la liste des cellules en
+  équilibrage reste disponible via le text_sensor "Batterie Cellules en
+  équilibrage" (`jbd_bms_ble`).
+- **Compteur agrégé de défauts batterie** (`battery_fault_count` d'origine) :
+  non porté — chaque défaut reste disponible individuellement en
+  `binary_sensor` (surtension/sous-tension cellule, surchauffe, surcourant,
+  court-circuit).
+- **État de connexion PZEM** (`ac_load_connected`/`grid_connected`
+  d'origine) : non porté — le composant `pzemac` natif ne fournit pas de
+  binary_sensor de connexion par adresse.
+- **Énergie PZEM mensuelle/totale séparée** : `pzemac` n'expose qu'un
+  compteur `energy` cumulé (contrairement aux registres MPPT internes qui
+  distinguent jour/mois/total).
+
+## Corrections notables
+
+- **Température batterie/contrôleur MPPT** : les registres eSmart3
+  `wBatTemp`/`wInnerTemp` sont déjà en °C entiers (pas de division par 10
+  comme les tensions/courants du même message) — un firmware antérieur
+  affichait 10× trop bas (ex. 3.4 °C au lieu de 34.0 °C).
+- **Décodage modèle/série/firmware MPPT** : les paires de caractères ASCII
+  étaient assemblées dans le mauvais ordre (octet fort avant l'octet
+  faible), ce qui inversait chaque paire de lettres (ex. "Seamtr-306-APMTP"
+  au lieu de "eSmart3-60A-MPPT").
 
 ## Home Assistant
 
