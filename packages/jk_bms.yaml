@@ -1,0 +1,126 @@
+# =============================================================================
+# JK BMS (RS485, protocole 0x4E 0x57) - jk_bms.cpp
+# Composant syssi/esphome-jk-bms (jk_modbus + jk_bms).
+# Limitation vs projet d'origine : une seule unité sur le bus
+# (le multi-drop adressé n'est pas supporté par le composant syssi).
+# =============================================================================
+
+uart:
+  - id: uart_jk
+    rx_pin: ${jk_rx_pin}
+    tx_pin: ${jk_tx_pin}
+    baud_rate: 115200
+    rx_buffer_size: 384
+
+jk_modbus:
+  - id: jk_modbus0
+    uart_id: uart_jk
+    rx_timeout: 50ms
+    flow_control_pin: ${jk_de_pin}
+
+jk_bms:
+  - id: jk_bms0
+    jk_modbus_id: jk_modbus0
+    update_interval: 2s
+
+sensor:
+  - platform: jk_bms
+    jk_bms_id: jk_bms0
+    total_voltage:
+      name: "JK BMS Tension"
+      id: jk_voltage
+    current:
+      name: "JK BMS Courant"
+      id: jk_current
+    power:
+      name: "JK BMS Puissance"
+      id: jk_power
+    state_of_charge:
+      name: "JK BMS SoC"
+      id: jk_soc
+    charging_cycles:
+      name: "JK BMS Cycles"
+    cell_count:
+      name: "JK BMS Nombre de cellules"
+    min_cell_voltage:
+      name: "JK BMS Cellule min"
+      id: jk_min_cell_v
+    max_cell_voltage:
+      name: "JK BMS Cellule max"
+      id: jk_max_cell_v
+    delta_cell_voltage:
+      name: "JK BMS Delta cellules"
+      id: jk_delta_cell_v
+    mosfet_temperature:
+      name: "JK BMS Température MOS"
+    temperature_sensor_1:
+      name: "JK BMS Température 1"
+    temperature_sensor_2:
+      name: "JK BMS Température 2"
+    errors_bitmask:
+      name: "JK BMS Défauts (bitmask)"
+    actual_battery_capacity:
+      name: "JK BMS Capacité réelle"
+    capacity_remaining:
+      name: "JK BMS Capacité restante"
+    cell_voltage_1:
+      name: "JK BMS Cellule 1"
+    cell_voltage_2:
+      name: "JK BMS Cellule 2"
+    cell_voltage_3:
+      name: "JK BMS Cellule 3"
+    cell_voltage_4:
+      name: "JK BMS Cellule 4"
+    cell_voltage_5:
+      name: "JK BMS Cellule 5"
+    cell_voltage_6:
+      name: "JK BMS Cellule 6"
+    cell_voltage_7:
+      name: "JK BMS Cellule 7"
+    cell_voltage_8:
+      name: "JK BMS Cellule 8"
+    cell_voltage_9:
+      name: "JK BMS Cellule 9"
+    cell_voltage_10:
+      name: "JK BMS Cellule 10"
+    cell_voltage_11:
+      name: "JK BMS Cellule 11"
+    cell_voltage_12:
+      name: "JK BMS Cellule 12"
+    cell_voltage_13:
+      name: "JK BMS Cellule 13"
+    cell_voltage_14:
+      name: "JK BMS Cellule 14"
+    cell_voltage_15:
+      name: "JK BMS Cellule 15"
+    cell_voltage_16:
+      name: "JK BMS Cellule 16"
+
+binary_sensor:
+  - platform: jk_bms
+    jk_bms_id: jk_bms0
+    online_status:
+      name: "JK BMS Connecté"
+      id: jk_online
+    balancing:
+      name: "JK BMS Équilibrage"
+    charging:
+      name: "JK BMS Charge MOS"
+    discharging:
+      name: "JK BMS Décharge MOS"
+
+switch:
+  - platform: jk_bms
+    jk_bms_id: jk_bms0
+    charging:
+      name: "JK BMS Autoriser charge"
+    discharging:
+      name: "JK BMS Autoriser décharge"
+
+text_sensor:
+  - platform: jk_bms
+    jk_bms_id: jk_bms0
+    errors:
+      name: "JK BMS Défauts"
+    operation_mode:
+      name: "JK BMS Mode"

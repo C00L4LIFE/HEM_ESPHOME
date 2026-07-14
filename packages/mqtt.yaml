@@ -1,0 +1,22 @@
+# =============================================================================
+# MQTT / Home Assistant
+# Reproduit ha_manager.cpp : discovery automatique Home Assistant.
+# Le topic par défaut est le nom du device (hem-XXXXXX), équivalent hem/XXXX.
+# =============================================================================
+
+mqtt:
+  broker: !secret mqtt_broker
+  port: 1883
+  username: !secret mqtt_user
+  password: !secret mqtt_password
+  discovery: true
+  discovery_prefix: homeassistant
+  # Équivalent WATCHDOG_MQTT_TIMEOUT (10 min sans MQTT -> reboot)
+  reboot_timeout: 10min
+
+# Alternative : API native ESPHome (remplace avantageusement MQTT si
+# Home Assistant est utilisé ; ne pas activer les deux en même temps
+# pour éviter les entités en double).
+# api:
+#   encryption:
+#     key: !secret api_encryption_key

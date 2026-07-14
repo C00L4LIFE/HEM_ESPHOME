@@ -1,0 +1,76 @@
+# =============================================================================
+# GPIO : 4 relais + 4 entrées digitales (gpio_manager.cpp)
+# Relais actifs à l'état bas (inverted). États restaurés au démarrage
+# (équivalent de la sauvegarde NVS relays_state du projet d'origine).
+# =============================================================================
+
+switch:
+  - platform: gpio
+    name: "Relais 1"
+    id: relay_1
+    pin:
+      number: ${relay_1_pin}
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: gpio
+    name: "Relais 2"
+    id: relay_2
+    pin:
+      number: ${relay_2_pin}
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: gpio
+    name: "Relais 3"
+    id: relay_3
+    pin:
+      number: ${relay_3_pin}
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: gpio
+    name: "Relais 4"
+    id: relay_4
+    pin:
+      number: ${relay_4_pin}
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+binary_sensor:
+  # GPIO 33 : pull-up interne disponible
+  - platform: gpio
+    name: "Entrée 1"
+    id: input_1
+    pin:
+      number: ${input_1_pin}
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on_off: 50ms
+  # GPIO 34/35/36 : entrées seules, pas de pull-up interne (pull-up externe requis)
+  - platform: gpio
+    name: "Entrée 2"
+    id: input_2
+    pin:
+      number: ${input_2_pin}
+      mode:
+        input: true
+    filters:
+      - delayed_on_off: 50ms
+  - platform: gpio
+    name: "Entrée 3"
+    id: input_3
+    pin:
+      number: ${input_3_pin}
+      mode:
+        input: true
+    filters:
+      - delayed_on_off: 50ms
+  - platform: gpio
+    name: "Entrée 4"
+    id: input_4
+    pin:
+      number: ${input_4_pin}
+      mode:
+        input: true
+    filters:
+      - delayed_on_off: 50ms

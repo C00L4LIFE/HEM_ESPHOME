@@ -1,0 +1,138 @@
+# =============================================================================
+# JBD BMS (Xiaoxiang) via BLE - ble_battery.cpp
+# Composant syssi/esphome-jbd-bms.
+# L'adresse MAC du BMS est dans secrets.yaml (jbd_bms_mac_address).
+# =============================================================================
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+ble_client:
+  - id: jbd_client
+    mac_address: !secret jbd_bms_mac_address
+
+jbd_bms_ble:
+  - id: jbd_bms0
+    ble_client_id: jbd_client
+    update_interval: 2s
+
+sensor:
+  - platform: jbd_bms_ble
+    jbd_bms_ble_id: jbd_bms0
+    total_voltage:
+      name: "Batterie Tension"
+      id: jbd_voltage
+    current:
+      name: "Batterie Courant"
+      id: jbd_current
+    power:
+      name: "Batterie Puissance"
+      id: jbd_power
+    state_of_charge:
+      name: "Batterie SoC"
+      id: jbd_soc
+    charging_cycles:
+      name: "Batterie Cycles"
+    nominal_capacity:
+      name: "Batterie Capacité nominale"
+      id: jbd_nominal_capacity
+    capacity_remaining:
+      name: "Batterie Capacité restante"
+      id: jbd_capacity_remaining
+    cell_count:
+      name: "Batterie Nombre de cellules"
+    min_cell_voltage:
+      name: "Batterie Cellule min"
+      id: jbd_min_cell_v
+    max_cell_voltage:
+      name: "Batterie Cellule max"
+      id: jbd_max_cell_v
+    delta_cell_voltage:
+      name: "Batterie Delta cellules"
+      id: jbd_delta_cell_v
+    average_cell_voltage:
+      name: "Batterie Cellule moyenne"
+    temperature_1:
+      name: "Batterie Température 1"
+      id: jbd_temp_1
+    temperature_2:
+      name: "Batterie Température 2"
+      id: jbd_temp_2
+    cell_voltage_1:
+      name: "Batterie Cellule 1"
+    cell_voltage_2:
+      name: "Batterie Cellule 2"
+    cell_voltage_3:
+      name: "Batterie Cellule 3"
+    cell_voltage_4:
+      name: "Batterie Cellule 4"
+    cell_voltage_5:
+      name: "Batterie Cellule 5"
+    cell_voltage_6:
+      name: "Batterie Cellule 6"
+    cell_voltage_7:
+      name: "Batterie Cellule 7"
+    cell_voltage_8:
+      name: "Batterie Cellule 8"
+    cell_voltage_9:
+      name: "Batterie Cellule 9"
+    cell_voltage_10:
+      name: "Batterie Cellule 10"
+    cell_voltage_11:
+      name: "Batterie Cellule 11"
+    cell_voltage_12:
+      name: "Batterie Cellule 12"
+    cell_voltage_13:
+      name: "Batterie Cellule 13"
+    cell_voltage_14:
+      name: "Batterie Cellule 14"
+    cell_voltage_15:
+      name: "Batterie Cellule 15"
+    cell_voltage_16:
+      name: "Batterie Cellule 16"
+
+binary_sensor:
+  - platform: jbd_bms_ble
+    jbd_bms_ble_id: jbd_bms0
+    online_status:
+      name: "Batterie Connectée"
+      id: jbd_online
+    balancing:
+      name: "Batterie Équilibrage"
+    charging:
+      name: "Batterie En charge"
+    discharging:
+      name: "Batterie En décharge"
+    cell_overvoltage_protection:
+      name: "Batterie Défaut surtension cellule"
+    cell_undervoltage_protection:
+      name: "Batterie Défaut sous-tension cellule"
+    charge_overtemperature_protection:
+      name: "Batterie Défaut température charge"
+    discharge_overtemperature_protection:
+      name: "Batterie Défaut température décharge"
+    charge_overcurrent_protection:
+      name: "Batterie Défaut surcourant charge"
+    discharge_overcurrent_protection:
+      name: "Batterie Défaut surcourant décharge"
+    short_circuit_protection:
+      name: "Batterie Défaut court-circuit"
+
+switch:
+  - platform: jbd_bms_ble
+    jbd_bms_ble_id: jbd_bms0
+    charging:
+      name: "Batterie MOS Charge"
+    discharging:
+      name: "Batterie MOS Décharge"
+
+text_sensor:
+  - platform: jbd_bms_ble
+    jbd_bms_ble_id: jbd_bms0
+    errors:
+      name: "Batterie Défauts"
+    device_model:
+      name: "Batterie Modèle"
+    balancing_cells:
+      name: "Batterie Cellules en équilibrage"

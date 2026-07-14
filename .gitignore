@@ -1,0 +1,6 @@
+# Secrets (WiFi, MQTT, MAC BMS...)
+secrets.yaml
+
+# Build ESPHome
+.esphome/
+__pycache__/

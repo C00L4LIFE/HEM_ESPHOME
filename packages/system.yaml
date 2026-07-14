@@ -1,0 +1,100 @@
+# =============================================================================
+# Système : OTA, serveur web, temps (NTP + DS3231), LED de statut,
+# capteurs système (RSSI, heap, uptime, IP/MAC), watchdog MPPT
+# =============================================================================
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+safe_mode:
+
+# Serveur web embarqué (remplace web_server.cpp + HTML custom)
+web_server:
+  port: 80
+  version: 3
+  local: true
+
+# --- I2C pour le DS3231 ---
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+
+# --- Temps : NTP avec RTC DS3231 en secours (time_manager.cpp) ---
+time:
+  - platform: ds1307   # compatible DS3231
+    id: rtc_time
+    update_interval: never
+  - platform: sntp
+    id: sntp_time
+    # Fuseau auto-détecté à la compilation (America/Port-au-Prince sur ce PC).
+    # Pour forcer : timezone: Europe/Paris (défaut du projet d'origine)
+    servers:
+      - pool.ntp.org
+      - time.nist.gov
+      - time.google.com
+    on_time_sync:
+      then:
+        # Sauvegarder l'heure NTP dans le DS3231
+        - ds1307.write_time:
+
+# --- LED de statut (GPIO2, clignote en cas de problème) ---
+status_led:
+  pin: ${status_led_pin}
+
+# --- Debug (heap libre, temps de boucle) ---
+debug:
+  update_interval: 30s
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    id: wifi_rssi
+    update_interval: 30s
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    update_interval: 30s
+  - platform: debug
+    free:
+      name: "Heap libre"
+    loop_time:
+      name: "Temps de boucle"
+  - platform: internal_temperature
+    name: "Température ESP32"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "Adresse IP"
+    mac_address:
+      name: "Adresse MAC"
+    ssid:
+      name: "SSID WiFi"
+  - platform: version
+    name: "Version ESPHome"
+
+button:
+  - platform: restart
+    name: "Redémarrer"
+    id: hem_restart
+  - platform: safe_mode
+    name: "Redémarrer en mode sans échec"
+
+# --- Watchdog applicatif MPPT (main.cpp : WATCHDOG_MPPT_TIMEOUT 5 min,
+#     période de grâce 3 min au démarrage) ---
+interval:
+  - interval: 60s
+    then:
+      - lambda: |-
+          static uint8_t mppt_offline_min = 0;
+          if (millis() < 180000) return;  // grâce de 3 minutes
+          if (id(esmart3_hub).is_online()) {
+            mppt_offline_min = 0;
+            return;
+          }
+          if (++mppt_offline_min >= 5) {
+            ESP_LOGE("watchdog", "MPPT silencieux depuis 5 min -> redémarrage");
+            App.safe_reboot();
+          }

@@ -1,0 +1,22 @@
+# =============================================================================
+# WiFi : station + AP de secours + portail captif
+# Reproduit wifi_manager.cpp : SSID principal + backup, AP HEM_XXXX,
+# reboot après 5 min sans WiFi (WATCHDOG_WIFI_TIMEOUT)
+# =============================================================================
+
+wifi:
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+    # WiFi de backup (optionnel, décommenter si besoin)
+    # - ssid: !secret wifi_ssid2
+    #   password: !secret wifi_password2
+  # Équivalent WATCHDOG_WIFI_TIMEOUT (5 min sans WiFi -> reboot)
+  reboot_timeout: 5min
+  # Mode AP de secours (équivalent HEM_XXXX / 12345678)
+  ap:
+    password: !secret ap_password
+    # Délai avant démarrage de l'AP (WIFI_AP_AUTOSTART_DELAY_MS = 30 s)
+    ap_timeout: 30s
+
+captive_portal:

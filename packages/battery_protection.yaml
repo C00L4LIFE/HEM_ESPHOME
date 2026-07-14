@@ -1,0 +1,489 @@
+# =============================================================================
+# Protection batterie automatique - portage de battery_protection.cpp
+#
+# Pilote la limite de courant de charge du MPPT eSmart3 en fonction de la
+# batterie JBD (BLE) :
+#   P1 : limite absolue de courant de charge
+#   P2 : cellule en surtension (pré-déclenchement 20 mV avant le seuil,
+#        sortie avec hystérésis ET delta cellules < seuil)
+#   P3 : équilibrage (delta élevé + SoC élevé)
+#   P4 : batterie pleine (SoC >= seuil)
+#   P5 : recharge auto max après décharge prolongée
+# + courbe de charge adaptée au SoC (70/85/95 %)
+#
+# Tous les seuils sont réglables via les entités "number" (persistants,
+# équivalent NVS bat_protect du projet d'origine).
+# =============================================================================
+
+globals:
+  - id: bp_current_avg
+    type: float
+    initial_value: "0.0"
+  - id: bp_cell_ov_active
+    type: bool
+    initial_value: "false"
+  - id: bp_balance_active
+    type: bool
+    initial_value: "false"
+  - id: bp_samples_above
+    type: int
+    initial_value: "0"
+  - id: bp_samples_below
+    type: int
+    initial_value: "0"
+  - id: bp_discharge_start
+    type: uint32_t
+    initial_value: "0"
+  - id: bp_discharge_timer_active
+    type: bool
+    initial_value: "false"
+  - id: bp_last_action
+    type: uint32_t
+    initial_value: "0"
+  - id: bp_mppt_limit
+    type: float
+    initial_value: "0.0"
+  - id: bp_target_current_g
+    type: float
+    initial_value: "0.0"
+  - id: bp_reason_code
+    type: int
+    initial_value: "0"
+
+# --- Configuration (valeurs par défaut de battery_protection.h) ---
+number:
+  - platform: template
+    name: "Protection Courant charge max"
+    id: bp_max_charge_current
+    unit_of_measurement: A
+    min_value: 1
+    max_value: 60
+    step: 0.5
+    initial_value: 30            # DEFAULT_MAX_CHARGE_CURRENT
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Courant cellule OV"
+    id: bp_cell_ov_current
+    unit_of_measurement: A
+    min_value: -10
+    max_value: 30
+    step: 0.5
+    initial_value: 0             # DEFAULT_CELL_OV_CURRENT
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Courant équilibrage"
+    id: bp_balance_current
+    unit_of_measurement: A
+    min_value: 0
+    max_value: 30
+    step: 0.5
+    initial_value: 7             # DEFAULT_BALANCE_CURRENT
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Courant max normal"
+    id: bp_normal_max_current
+    unit_of_measurement: A
+    min_value: 1
+    max_value: 60
+    step: 0.5
+    initial_value: 60            # DEFAULT_NORMAL_MAX_CURRENT
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Seuil cellule OV"
+    id: bp_cell_ov_threshold
+    unit_of_measurement: mV
+    min_value: 3300
+    max_value: 3800
+    step: 10
+    initial_value: 3600          # DEFAULT_CELL_OV_THRESHOLD
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Seuil delta cellules"
+    id: bp_cell_delta_threshold
+    unit_of_measurement: mV
+    min_value: 5
+    max_value: 300
+    step: 5
+    initial_value: 30            # DEFAULT_CELL_DELTA_THRESHOLD
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Seuil SoC équilibrage"
+    id: bp_soc_balance_threshold
+    unit_of_measurement: "%"
+    min_value: 50
+    max_value: 100
+    step: 1
+    initial_value: 87            # DEFAULT_SOC_BALANCE_THRESHOLD
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Hystérésis cellule OV"
+    id: bp_cell_ov_hysteresis
+    unit_of_measurement: mV
+    min_value: 10
+    max_value: 200
+    step: 10
+    initial_value: 50            # DEFAULT_CELL_OV_HYSTERESIS
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Délai recharge après décharge"
+    id: bp_discharge_recharge_delay
+    unit_of_measurement: s
+    min_value: 10
+    max_value: 3600
+    step: 10
+    initial_value: 60            # DEFAULT_DISCHARGE_RECHARGE_DELAY
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Seuil SoC plein"
+    id: bp_soc_full_threshold
+    unit_of_measurement: "%"
+    min_value: 80
+    max_value: 100
+    step: 1
+    initial_value: 100           # DEFAULT_SOC_FULL_THRESHOLD
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    name: "Protection Courant batterie pleine"
+    id: bp_soc_full_current
+    unit_of_measurement: A
+    min_value: 0
+    max_value: 10
+    step: 0.5
+    initial_value: 1             # DEFAULT_SOC_FULL_CURRENT
+    optimistic: true
+    restore_value: true
+    entity_category: config
+
+switch:
+  - platform: template
+    name: "Protection batterie active"
+    id: bp_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_off:
+      - lambda: |-
+          // Comme BatteryProtection_SetEnabled(false) : reset des états
+          id(bp_cell_ov_active) = false;
+          id(bp_balance_active) = false;
+          id(bp_reason_code) = 0;
+
+# --- État de la protection ---
+text_sensor:
+  - platform: template
+    name: "Protection Raison"
+    lambda: |-
+      switch (id(bp_reason_code)) {
+        case 1: return {"Limite courant"};
+        case 2: return {"Cellule OV"};
+        case 3: return {"Équilibrage"};
+        case 4: return {"Batterie pleine"};
+        default: return {"Normal"};
+      }
+    update_interval: 2s
+
+binary_sensor:
+  - platform: template
+    name: "Protection Limitation active"
+    lambda: |-
+      return id(bp_reason_code) != 0;
+
+sensor:
+  - platform: template
+    name: "Protection Limite MPPT appliquée"
+    unit_of_measurement: A
+    accuracy_decimals: 1
+    lambda: |-
+      return id(bp_mppt_limit);
+    update_interval: 2s
+  - platform: template
+    name: "Protection Courant cible batterie"
+    unit_of_measurement: A
+    accuracy_decimals: 1
+    lambda: |-
+      return id(bp_target_current_g);
+    update_interval: 2s
+
+# --- Application de la limite (portage de _applyChargeCurrent) ---
+script:
+  - id: bp_apply
+    mode: single
+    parameters:
+      target: float
+      reason: int
+      urgent: bool
+    then:
+      - lambda: |-
+          const uint32_t ACTION_COOLDOWN = 5000;
+          const int SAMPLES_THRESHOLD = 3;
+
+          if (!urgent && (millis() - id(bp_last_action)) < ACTION_COOLDOWN)
+            return;
+
+          float mppt_current = id(mppt_charge_current).state;
+          if (isnan(mppt_current)) mppt_current = 0.0f;
+          float battery_current = id(bp_current_avg);
+          float normal_max = id(bp_normal_max_current).state;
+          float mppt_limit;
+
+          //================================================================
+          // MODE URGENT : application immédiate (protection cellule OV)
+          //================================================================
+          if (urgent) {
+            if (target < 0) {
+              // Cible négative : forcer la batterie à se décharger
+              float surplus = battery_current - target;
+              mppt_limit = mppt_current - surplus;
+              if (mppt_limit < 0) mppt_limit = 0;
+            } else {
+              mppt_limit = target;
+            }
+            id(bp_samples_above) = 0;
+            id(bp_samples_below) = 0;
+            id(esmart3_hub).set_max_charge_current(mppt_limit);
+            id(bp_mppt_limit) = mppt_limit;
+            id(bp_target_current_g) = target;
+            id(bp_reason_code) = reason;
+            id(bp_last_action) = millis();
+            ESP_LOGW("bat_protect", "URGENT! Cible=%.1fA -> MPPT=%.1fA", target, mppt_limit);
+            return;
+          }
+
+          //================================================================
+          // MODE NORMAL : ajustement progressif avec filtrage
+          //================================================================
+          if (battery_current < -2.0f) {
+            // Batterie en décharge -> remettre le MPPT au max
+            id(bp_samples_below)++;
+            id(bp_samples_above) = 0;
+            if (id(bp_samples_below) >= SAMPLES_THRESHOLD) {
+              mppt_limit = normal_max;
+              id(bp_samples_below) = 0;
+              if (id(bp_mppt_limit) < normal_max - 1.0f) {
+                ESP_LOGI("bat_protect", "Batterie décharge %.1fA -> restauration MPPT à %.1fA",
+                         battery_current, mppt_limit);
+                id(esmart3_hub).set_max_charge_current(mppt_limit);
+                id(bp_mppt_limit) = mppt_limit;
+                id(bp_target_current_g) = target;
+                id(bp_reason_code) = reason;
+                id(bp_last_action) = millis();
+                return;
+              }
+            } else {
+              mppt_limit = id(bp_mppt_limit) > 0 ? id(bp_mppt_limit) : normal_max;
+            }
+          } else if (battery_current > target + 2.0f) {
+            // Au-dessus de la limite + marge -> réduire progressivement
+            id(bp_samples_above)++;
+            id(bp_samples_below) = 0;
+            if (id(bp_samples_above) >= SAMPLES_THRESHOLD) {
+              float surplus = battery_current - target;
+              mppt_limit = mppt_current - (surplus * 0.5f);
+              id(bp_samples_above) = 0;
+            } else {
+              mppt_limit = id(bp_mppt_limit) > 0 ? id(bp_mppt_limit) : normal_max;
+            }
+          } else if (battery_current < target - 5.0f && battery_current > 0) {
+            // Bien en dessous de la limite -> augmenter progressivement
+            id(bp_samples_below)++;
+            id(bp_samples_above) = 0;
+            if (id(bp_samples_below) >= SAMPLES_THRESHOLD) {
+              float headroom = target - battery_current;
+              mppt_limit = id(bp_mppt_limit) + (headroom * 0.3f);
+              if (mppt_limit > normal_max) mppt_limit = normal_max;
+              id(bp_samples_below) = 0;
+            } else {
+              mppt_limit = id(bp_mppt_limit) > 0 ? id(bp_mppt_limit) : normal_max;
+            }
+          } else {
+            // Zone OK
+            id(bp_samples_above) = 0;
+            id(bp_samples_below) = 0;
+            mppt_limit = id(bp_mppt_limit) > 0 ? id(bp_mppt_limit) : normal_max;
+          }
+
+          if (mppt_limit > normal_max) mppt_limit = normal_max;
+          if (mppt_limit < 0) mppt_limit = 0;
+
+          id(bp_target_current_g) = target;
+
+          // Appliquer si différence > 5 A (hystérésis anti-oscillation)
+          if (fabsf(mppt_limit - id(bp_mppt_limit)) > 5.0f || id(bp_mppt_limit) <= 0) {
+            id(esmart3_hub).set_max_charge_current(mppt_limit);
+            id(bp_mppt_limit) = mppt_limit;
+            id(bp_reason_code) = reason;
+            id(bp_last_action) = millis();
+            ESP_LOGI("bat_protect", "Bat=%.1fA(avg), Cible=%.1fA -> MPPT=%.1fA",
+                     battery_current, target, mppt_limit);
+          }
+
+# --- Évaluation des protections (portage de _evaluateProtections, 2x/s) ---
+interval:
+  - interval: 500ms
+    then:
+      - lambda: |-
+          const float CELL_OV_PRETRIGGER_MARGIN_MV = 20.0f;
+          const float CURRENT_FILTER_ALPHA = 0.1f;
+
+          if (!id(bp_enabled).state)
+            return;
+          if (!id(jbd_online).state) {
+            id(bp_reason_code) = 0;
+            return;
+          }
+
+          float cur = id(jbd_current).state;          // A, + = charge
+          float soc = id(jbd_soc).state;              // %
+          float cell_max_mv = id(jbd_max_cell_v).state * 1000.0f;
+          float delta_mv = id(jbd_delta_cell_v).state * 1000.0f;
+          if (isnan(cur) || isnan(soc) || isnan(cell_max_mv) || isnan(delta_mv))
+            return;
+
+          // Moyenne glissante du courant (anti-oscillation)
+          id(bp_current_avg) = id(bp_current_avg) * (1.0f - CURRENT_FILTER_ALPHA)
+                             + cur * CURRENT_FILTER_ALPHA;
+
+          float normal_max = id(bp_normal_max_current).state;
+          float bal_cur = id(bp_balance_current).state;
+          float full_cur = id(bp_soc_full_current).state;
+          float max_chg = id(bp_max_charge_current).state;
+          float ov_thresh = id(bp_cell_ov_threshold).state;      // mV
+          float ov_hyst = id(bp_cell_ov_hysteresis).state;       // mV
+          float delta_thresh = id(bp_cell_delta_threshold).state; // mV
+
+          // Courbe de charge adaptée au SoC
+          float soc_based;
+          if (soc < 70) {
+            soc_based = normal_max;
+          } else if (soc < 85) {
+            float r = (soc - 70) / 15.0f;
+            soc_based = normal_max - r * (normal_max - bal_cur);
+          } else if (soc < 95) {
+            float r = (soc - 85) / 10.0f;
+            soc_based = bal_cur - r * (bal_cur - full_cur);
+          } else {
+            soc_based = full_cur;
+          }
+          float target = soc_based;
+          int reason = 0;
+
+          // Pré-déclenchement OV : 20 mV avant le seuil configuré
+          float ov_trigger = ov_thresh > CELL_OV_PRETRIGGER_MARGIN_MV
+                           ? ov_thresh - CELL_OV_PRETRIGGER_MARGIN_MV : ov_thresh;
+
+          //================================================================
+          // PROTECTION 1 : limite absolue de courant de charge
+          //================================================================
+          if (cur > max_chg) {
+            target = max_chg;
+            reason = 1;
+          }
+
+          //================================================================
+          // PROTECTION 2 : cellule en surtension - CRITIQUE
+          //================================================================
+          if (cell_max_mv >= ov_trigger) {
+            if (!id(bp_cell_ov_active)) {
+              ESP_LOGW("bat_protect", "URGENCE cellule %.0fmV >= %.0fmV -> limite %.1fA",
+                       cell_max_mv, ov_trigger, id(bp_cell_ov_current).state);
+            }
+            id(bp_cell_ov_active) = true;
+            id(bp_reason_code) = 2;
+            id(bp_apply).execute(id(bp_cell_ov_current).state, 2, true);
+            return;
+          } else if (id(bp_cell_ov_active)) {
+            if (cell_max_mv < (ov_thresh - ov_hyst)) {
+              if (delta_mv < delta_thresh) {
+                // Tension ET delta OK -> sortie du mode OV, restauration rapide
+                ESP_LOGI("bat_protect", "Cellule OK (%.0fmV) et delta %.0fmV < %.0fmV -> sortie mode OV",
+                         cell_max_mv, delta_mv, delta_thresh);
+                id(bp_cell_ov_active) = false;
+                id(bp_samples_above) = 0;
+                id(bp_samples_below) = 3;   // forcer l'action au prochain apply
+                id(bp_last_action) = 0;     // annuler le cooldown
+              } else {
+                // Tension OK mais delta trop élevé -> maintien OV
+                id(bp_reason_code) = 2;
+                id(bp_apply).execute(id(bp_cell_ov_current).state, 2, true);
+                return;
+              }
+            } else {
+              // Tension toujours haute -> maintien OV
+              id(bp_reason_code) = 2;
+              id(bp_apply).execute(id(bp_cell_ov_current).state, 2, true);
+              return;
+            }
+          }
+
+          //================================================================
+          // PROTECTION 3 : delta cellules élevé + SoC élevé (équilibrage)
+          //================================================================
+          if (!id(bp_cell_ov_active)) {
+            if (delta_mv >= delta_thresh && soc >= id(bp_soc_balance_threshold).state) {
+              if (!id(bp_balance_active)) {
+                ESP_LOGW("bat_protect", "Delta %.0fmV >= %.0fmV & SoC %.0f%% -> équilibrage",
+                         delta_mv, delta_thresh, soc);
+              }
+              id(bp_balance_active) = true;
+              target = bal_cur;
+              reason = 3;
+            } else if (id(bp_balance_active) &&
+                       (delta_mv < (delta_thresh - 5) ||
+                        soc < (id(bp_soc_balance_threshold).state - 2))) {
+              ESP_LOGI("bat_protect", "Delta/SoC OK, sortie mode équilibrage");
+              id(bp_balance_active) = false;
+            }
+          }
+
+          //================================================================
+          // PROTECTION 4 : batterie pleine (SoC >= seuil)
+          //================================================================
+          if (!id(bp_cell_ov_active) && !id(bp_balance_active) && reason == 0) {
+            if (soc >= id(bp_soc_full_threshold).state) {
+              target = full_cur;
+              reason = 4;
+            }
+          }
+
+          //================================================================
+          // PROTECTION 5 : recharge auto max après décharge prolongée
+          //================================================================
+          if (!id(bp_cell_ov_active) && !id(bp_balance_active) && reason == 0) {
+            if (cur < 0) {
+              if (!id(bp_discharge_timer_active)) {
+                id(bp_discharge_start) = millis();
+                id(bp_discharge_timer_active) = true;
+              }
+              uint32_t elapsed = (millis() - id(bp_discharge_start)) / 1000;
+              if (elapsed >= (uint32_t) id(bp_discharge_recharge_delay).state) {
+                target = normal_max;
+                reason = 0;
+              }
+            } else {
+              id(bp_discharge_timer_active) = false;
+            }
+          } else {
+            id(bp_discharge_timer_active) = false;
+          }
+
+          id(bp_reason_code) = reason;
+          id(bp_apply).execute(target, reason, false);

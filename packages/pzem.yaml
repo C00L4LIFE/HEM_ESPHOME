@@ -1,0 +1,67 @@
+# =============================================================================
+# PZEM-004T v3 (Modbus RTU) - pzem_manager.cpp
+# 2 modules sur le même bus UART :
+#   adresse 0x01 = Consommation AC (charge maison)
+#   adresse 0x02 = Réseau secteur (EDF/Grid)
+# =============================================================================
+
+uart:
+  - id: uart_pzem
+    rx_pin: ${pzem_rx_pin}
+    tx_pin: ${pzem_tx_pin}
+    baud_rate: 9600
+
+modbus:
+  - id: modbus_pzem
+    uart_id: uart_pzem
+
+sensor:
+  # --- PZEM 1 : Consommation AC (charge) ---
+  - platform: pzemac
+    modbus_id: modbus_pzem
+    address: 1
+    update_interval: 2s
+    voltage:
+      name: "Conso AC Tension"
+      id: pzem_ac_load_voltage
+    current:
+      name: "Conso AC Courant"
+      id: pzem_ac_load_current
+    power:
+      name: "Conso AC Puissance"
+      id: pzem_ac_load_power
+    energy:
+      name: "Conso AC Énergie"
+      id: pzem_ac_load_energy
+      filters:
+        - multiply: 0.001  # Wh -> kWh
+      unit_of_measurement: kWh
+    frequency:
+      name: "Conso AC Fréquence"
+    power_factor:
+      name: "Conso AC Facteur de puissance"
+
+  # --- PZEM 2 : Réseau secteur (EDF/Grid) ---
+  - platform: pzemac
+    modbus_id: modbus_pzem
+    address: 2
+    update_interval: 2s
+    voltage:
+      name: "Secteur Tension"
+      id: pzem_grid_voltage
+    current:
+      name: "Secteur Courant"
+      id: pzem_grid_current
+    power:
+      name: "Secteur Puissance"
+      id: pzem_grid_power
+    energy:
+      name: "Secteur Énergie"
+      id: pzem_grid_energy
+      filters:
+        - multiply: 0.001  # Wh -> kWh
+      unit_of_measurement: kWh
+    frequency:
+      name: "Secteur Fréquence"
+    power_factor:
+      name: "Secteur Facteur de puissance"

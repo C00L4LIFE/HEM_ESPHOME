@@ -1,0 +1,86 @@
+# =============================================================================
+# Capteurs dérivés (calculs de main.cpp / ha_manager.cpp) :
+#   - puissance maison = PV - charge batterie
+#   - puissance batterie moyennée (25 échantillons de 5 s, ~2 min)
+#   - énergie restante batterie (Wh)
+#   - temps restant estimé (min ; négatif = temps de charge)
+# =============================================================================
+
+sensor:
+  # Puissance batterie signée (+ = charge) copiée toutes les 5 s puis moyennée
+  # sur 25 échantillons, comme batttery_avg_power du main.cpp
+  - platform: template
+    name: "Batterie Puissance moyenne"
+    id: battery_power_avg
+    unit_of_measurement: W
+    device_class: power
+    accuracy_decimals: 1
+    update_interval: 5s
+    lambda: |-
+      if (isnan(id(jbd_power).state)) return {};
+      return id(jbd_power).state;
+    filters:
+      - sliding_window_moving_average:
+          window_size: 25
+          send_every: 1
+
+  # Puissance consommée par la maison côté DC :
+  # house_power = pv_power - puissance de charge batterie
+  - platform: template
+    name: "Maison Puissance"
+    id: house_power
+    unit_of_measurement: W
+    device_class: power
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      float pv = id(mppt_pv_power).state;
+      float bat = id(jbd_power).state;   // + = charge batterie
+      if (isnan(pv)) return {};
+      if (isnan(bat)) bat = 0;
+      return pv - bat;
+
+  # Énergie restante batterie en Wh (capacité restante Ah x tension)
+  - platform: template
+    name: "Batterie Énergie restante"
+    id: battery_remaining_wh
+    unit_of_measurement: Wh
+    device_class: energy_storage
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      float ah = id(jbd_capacity_remaining).state;
+      float v = id(jbd_voltage).state;
+      if (isnan(ah) || isnan(v)) return {};
+      return ah * v;
+
+  # Temps restant estimé (minutes) - formule du main.cpp :
+  #   décharge : réserve de 20 Ah conservée si capacité > 20 Ah
+  #   charge   : valeur négative = temps de charge restant
+  - platform: template
+    name: "Batterie Temps restant estimé"
+    id: battery_time_remaining
+    unit_of_measurement: min
+    icon: "mdi:timer-sand"
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      float cur = id(jbd_current).state;
+      float v = id(jbd_voltage).state;
+      float rem_ah = id(jbd_capacity_remaining).state;
+      float nom_ah = id(jbd_nominal_capacity).state;
+      float avg_p = id(battery_power_avg).state;
+      if (isnan(cur) || isnan(v) || isnan(rem_ah) || isnan(nom_ah) || isnan(avg_p))
+        return {};
+      float rem_wh = rem_ah * v;
+      if (cur < -0.1f && avg_p < -1.0f) {
+        // Décharge
+        if (rem_ah > 20.0f)
+          return (rem_wh - (20.0f * v)) / (-avg_p) * 60.0f;
+        return rem_wh / (-avg_p) * 60.0f;
+      } else if (cur > 0.1f && avg_p > 1.0f) {
+        // Charge (temps négatif comme dans le projet d'origine)
+        float missing_wh = (nom_ah - rem_ah) * v;
+        return -(missing_wh / avg_p * 60.0f);
+      }
+      return 0.0f;

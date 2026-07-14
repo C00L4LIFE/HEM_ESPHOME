@@ -1,0 +1,128 @@
+# =============================================================================
+# MPPT eSmart3 (RS485) - composant custom local (components/esmart3)
+# Portage de mppt_manager.cpp + lib Joba_ESmart3.
+# Rotation de lecture identique : ChgSts un cycle sur deux, puis
+# Log / BatParam / ProParam / LoadParam.
+# =============================================================================
+
+uart:
+  - id: uart_esmart3
+    rx_pin: ${mppt_rx_pin}
+    tx_pin: ${mppt_tx_pin}
+    baud_rate: 9600
+
+esmart3:
+  id: esmart3_hub
+  uart_id: uart_esmart3
+  flow_control_pin: ${mppt_de_pin}
+  update_interval: 1s  # MPPT_READ_INTERVAL
+
+sensor:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    pv_voltage:
+      name: "MPPT PV Tension"
+      id: mppt_pv_voltage
+    pv_current:
+      name: "MPPT PV Courant"
+      id: mppt_pv_current
+    pv_power:
+      name: "MPPT PV Puissance"
+      id: mppt_pv_power
+    battery_voltage:
+      name: "MPPT Batterie Tension"
+      id: mppt_battery_voltage
+    charge_current:
+      name: "MPPT Courant de charge"
+      id: mppt_charge_current
+      filters:
+        # Calibration reprise de mppt_manager.cpp (wChgCurr * 0.9 / 10)
+        - multiply: 0.9
+    charge_power:
+      name: "MPPT Puissance de charge"
+      id: mppt_charge_power
+    battery_soc:
+      name: "MPPT Batterie SoC"
+      id: mppt_battery_soc
+    battery_temperature:
+      name: "MPPT Batterie Température"
+    controller_temperature:
+      name: "MPPT Température contrôleur"
+    load_voltage:
+      name: "MPPT Load Tension"
+    load_current:
+      name: "MPPT Load Courant"
+    load_power:
+      name: "MPPT Load Puissance"
+      id: mppt_load_power
+    co2_saved:
+      name: "MPPT CO2 économisé"
+    fault_count:
+      name: "MPPT Nombre de défauts"
+    energy_today:
+      name: "MPPT Énergie aujourd'hui"
+      id: mppt_energy_today
+    energy_month:
+      name: "MPPT Énergie ce mois"
+    energy_total:
+      name: "MPPT Énergie totale"
+      id: mppt_energy_total
+    load_energy_today:
+      name: "MPPT Load Énergie aujourd'hui"
+    load_energy_month:
+      name: "MPPT Load Énergie ce mois"
+    load_energy_total:
+      name: "MPPT Load Énergie totale"
+    bulk_voltage:
+      name: "MPPT Tension Bulk"
+    float_voltage:
+      name: "MPPT Tension Float"
+    equalize_voltage:
+      name: "MPPT Tension Égalisation"
+    max_charge_current:
+      name: "MPPT Courant charge max (lu)"
+      id: mppt_max_charge_current
+    max_discharge_current:
+      name: "MPPT Courant load max (lu)"
+    battery_ovp:
+      name: "MPPT Batterie OVP"
+    battery_uvp:
+      name: "MPPT Batterie UVP"
+
+binary_sensor:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    online_status:
+      name: "MPPT Connecté"
+      id: mppt_online
+    fault_active:
+      name: "MPPT Défaut actif"
+
+text_sensor:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    charge_mode:
+      name: "MPPT Mode de charge"
+    errors:
+      name: "MPPT Défauts"
+    model:
+      name: "MPPT Modèle"
+    serial_number:
+      name: "MPPT Numéro de série"
+    firmware:
+      name: "MPPT Firmware"
+
+number:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    max_charge_current:
+      name: "MPPT Courant charge max"
+      id: mppt_max_charge_current_number
+    max_load_current:
+      name: "MPPT Courant load max"
+
+switch:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    load:
+      name: "MPPT Sortie Load"
