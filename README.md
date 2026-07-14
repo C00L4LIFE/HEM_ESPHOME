@@ -121,23 +121,26 @@ Premier flash par USB, ensuite OTA.
 
 ### Mettre à jour après un push sur `main`
 
-`refresh: 1d` : les sources distantes (`packages:` et `external_components:`)
-sont mises en cache 24 h. **Cliquer sur "Installer"/"Update" dans l'add-on
-ne suffit pas** à forcer un re-téléchargement — le cache est conservé.
+`refresh: 0s` sur `packages:` et `external_components:` : les sources
+distantes sont **re-téléchargées à chaque compilation**, jamais de cache
+périmé. Un simple "Installer"/`esphome run` suffit désormais pour récupérer
+la dernière version poussée sur `main`.
 
-En CLI :
+Ce comportement est défini **dans `home_energy_management.yaml` lui-même**
+(le `refresh:` de chaque source) — contrairement aux changements dans
+`packages/*.yaml` ou `components/esmart3/`, une mise à jour de ce
+paramètre-là nécessite donc de récupérer la dernière version de
+`home_energy_management.yaml` (pas seulement relancer "Installer" sur
+l'ancienne copie). À faire une seule fois : après ça, "Installer" suffit
+toujours.
 
-```bash
-esphome clean home_energy_management.yaml
-esphome run home_energy_management.yaml
-```
-
-Dans l'add-on ESPHome Device Builder de Home Assistant (pas d'accès CLI
-direct) : ouvrir un gestionnaire de fichiers (add-on "Studio Code Server"
-ou "File editor") sur `/config/esphome/`, supprimer le dossier `.esphome/`
-(uniquement du cache, aucune perte), puis relancer "Installer" sur le
-device. Vérifier ensuite dans les logs qu'aucune ligne `[mqtt:...]` (ancien
-canal, remplacé par `api:`) n'apparaît — sinon le cache n'a pas été purgé.
+Si un device semble tourner sur une ancienne version malgré tout (ex. le
+timestamp `compiled on ...` dans les logs ne change pas d'un flash à
+l'autre), l'add-on ESPHome Device Builder de Home Assistant garde parfois
+un cache de build indépendant de `refresh:`. Forcer un nettoyage complet :
+menu **⋮** à côté du device → **Nettoyer les fichiers de compilation** (ou
+équivalent), puis relancer "Installer". En CLI : `esphome clean
+home_energy_management.yaml && esphome run home_energy_management.yaml`.
 
 ### Développer en local (modifier ce dépôt)
 

@@ -13,7 +13,7 @@
 # =============================================================================
 
 substitutions:
-  name: hem
+  name: hem-esphome
   friendly_name: "Home Energy Management"
 
   # --- Pins (identiques à src/config.h du projet d'origine) ---
@@ -59,19 +59,20 @@ esp32:
 external_components:
   - source: github://C00L4LIFE/HEM_ESPHOME@main
     components: [esmart3]
-    refresh: 1d
+    refresh: 0s
   - source: github://syssi/esphome-jbd-bms@main
-    refresh: 1d
+    refresh: 0s
 
 # Packages récupérés depuis GitHub (même mécanisme que external_components
-# ci-dessus). refresh: 1d => après une modification poussée sur main, relancer
-# `esphome clean home_energy_management.yaml` pour forcer le re-téléchargement
-# immédiatement au lieu d'attendre l'expiration du cache.
+# ci-dessus). refresh: 0s => re-téléchargé à CHAQUE compilation (jamais de
+# cache périmé). Volontaire tant que ce dépôt bouge souvent ; si le rythme
+# des changements ralentit, remonter à une valeur comme 1d pour accélérer
+# les compilations (auquel cas `esphome clean` reste nécessaire après un push).
 packages:
   hem:
     url: https://github.com/C00L4LIFE/HEM_ESPHOME
     ref: main
-    refresh: 1d
+    refresh: 0s
     files:
       - packages/wifi.yaml
       - packages/mqtt.yaml
