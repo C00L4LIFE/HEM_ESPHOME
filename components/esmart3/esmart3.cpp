@@ -86,25 +86,34 @@ void ESmart3Component::send_set_word_(uint8_t item, uint8_t start_word, uint16_t
   this->send_frame_(CMD_SET, item, payload, sizeof(payload));
 }
 
-bool ESmart3Component::try_send_pending_() {
-  if (this->pending_chg_) {
-    uint16_t deci = (uint16_t) (this->pending_chg_val_ * 10.0f);
-    this->pending_write_kind_ = 1;
-    this->send_set_word_(ITEM_BATPARAM, 0x05, deci);  // wMaxChgCurr
-    return true;
+void ESmart3Component::enqueue_write_(uint8_t item, uint8_t word_offset, uint16_t raw_value, uint8_t kind) {
+  // Remplace une écriture déjà en attente pour le même paramètre (évite l'empilement
+  // si l'utilisateur bouge un slider plusieurs fois avant que le bus se libère)
+  for (auto &w : this->pending_queue_) {
+    if (w.kind == kind) {
+      w.item = item;
+      w.word_offset = word_offset;
+      w.raw_value = raw_value;
+      return;
+    }
   }
-  if (this->pending_loadcur_) {
-    uint16_t deci = (uint16_t) (this->pending_loadcur_val_ * 10.0f);
-    this->pending_write_kind_ = 2;
-    this->send_set_word_(ITEM_BATPARAM, 0x06, deci);  // wMaxDisChgCurr
-    return true;
-  }
-  if (this->pending_load_) {
-    this->pending_write_kind_ = 3;
-    this->send_set_word_(ITEM_LOADPARAM, 0x01, this->pending_load_val_ ? 5117 : 5118);
-    return true;
-  }
+  this->pending_queue_.push_back({item, word_offset, raw_value, kind});
+}
+
+bool ESmart3Component::pending_has_(uint8_t kind) const {
+  for (const auto &w : this->pending_queue_)
+    if (w.kind == kind)
+      return true;
   return false;
+}
+
+bool ESmart3Component::try_send_pending_() {
+  if (this->pending_queue_.empty())
+    return false;
+  const PendingWrite &w = this->pending_queue_.front();
+  this->pending_write_kind_ = w.kind;
+  this->send_set_word_(w.item, w.word_offset, w.raw_value);
+  return true;
 }
 
 //=============================================================================
@@ -124,6 +133,11 @@ void ESmart3Component::update() {
   if (this->force_batparam_) {
     this->force_batparam_ = false;
     this->send_get_(ITEM_BATPARAM, 0, BATPARAM_WORDS);
+    return;
+  }
+  if (this->force_proparam_) {
+    this->force_proparam_ = false;
+    this->send_get_(ITEM_PROPARAM, 0, PROPARAM_WORDS);
     return;
   }
 
@@ -232,30 +246,35 @@ void ESmart3Component::handle_frame_(const uint8_t *frame, size_t len) {
 
   if (this->expect_ack_) {
     bool ok = (command == CMD_ACK);
-    switch (this->pending_write_kind_) {
-      case 1:
-        if (ok) {
-          this->pending_chg_ = false;
-          this->force_batparam_ = true;
-          ESP_LOGI(TAG, "Courant de charge max appliqué: %.1f A", this->pending_chg_val_);
-        }
-        break;
-      case 2:
-        if (ok) {
-          this->pending_loadcur_ = false;
-          this->force_batparam_ = true;
-          ESP_LOGI(TAG, "Courant load max appliqué: %.1f A", this->pending_loadcur_val_);
-        }
-        break;
-      case 3:
-        if (ok) {
-          this->pending_load_ = false;
-          ESP_LOGI(TAG, "Load %s", this->pending_load_val_ ? "ON" : "OFF");
-        }
-        break;
+    if (ok && !this->pending_queue_.empty()) {
+      uint8_t kind = this->pending_queue_.front().kind;
+      this->pending_queue_.erase(this->pending_queue_.begin());
+      switch (kind) {
+        case PENDING_MAX_CHARGE_CURRENT:
+        case PENDING_MAX_LOAD_CURRENT:
+        case PENDING_BULK_VOLTAGE:
+        case PENDING_FLOAT_VOLTAGE:
+        case PENDING_EQUALIZE_VOLTAGE:
+        case PENDING_EQUALIZE_TIME:
+        case PENDING_BATTERY_TYPE:
+          this->force_batparam_ = true;  // relire pour rafraîchir les sensors/numbers
+          break;
+        case PENDING_LOAD_OVP:
+        case PENDING_LOAD_UVP:
+        case PENDING_BATTERY_OVP:
+        case PENDING_BATTERY_OVP_RECOVER:
+        case PENDING_BATTERY_UVP:
+        case PENDING_BATTERY_UVP_RECOVER:
+          this->force_proparam_ = true;
+          break;
+        default:
+          break;  // PENDING_LOAD_STATE : LoadParam relu naturellement au prochain cycle
+      }
+      ESP_LOGI(TAG, "Écriture confirmée (kind=%u)", kind);
+    } else if (!ok) {
+      ESP_LOGW(TAG, "SET refusé (NACK) pour kind=%u, nouvelle tentative au prochain cycle",
+                this->pending_write_kind_);
     }
-    if (!ok)
-      ESP_LOGW(TAG, "SET refusé (NACK), nouvelle tentative au prochain cycle");
     this->pending_write_kind_ = 0;
     return;
   }
@@ -394,14 +413,18 @@ void ESmart3Component::parse_chgsts_(const uint8_t *d, size_t len) {
 #endif
 }
 
+static const char *const BATTERY_TYPE_NAMES[4] = {"Utilisateur", "Plomb-acide", "Gel", "AGM"};
+
 void ESmart3Component::parse_batparam_(const uint8_t *d, size_t len) {
   if (len < BATPARAM_WORDS * 2)
     return;
+  uint16_t bat_type_raw = word_(d, 1);
   float bulk = word_(d, 3) / 10.0f;
   float flt = word_(d, 4) / 10.0f;
   float max_chg = word_(d, 5) / 10.0f;
   float max_dis = word_(d, 6) / 10.0f;
   float equalize = word_(d, 7) / 10.0f;
+  uint16_t equalize_time = word_(d, 8);
 #ifdef USE_SENSOR
   if (this->bulk_voltage_sensor_ != nullptr)
     this->bulk_voltage_sensor_->publish_state(bulk);
@@ -415,10 +438,22 @@ void ESmart3Component::parse_batparam_(const uint8_t *d, size_t len) {
     this->max_discharge_current_sensor_->publish_state(max_dis);
 #endif
 #ifdef USE_NUMBER
-  if (this->max_charge_current_number_ != nullptr && !this->pending_chg_)
+  if (this->max_charge_current_number_ != nullptr && !this->pending_has_(PENDING_MAX_CHARGE_CURRENT))
     this->max_charge_current_number_->publish_state(max_chg);
-  if (this->max_load_current_number_ != nullptr && !this->pending_loadcur_)
+  if (this->max_load_current_number_ != nullptr && !this->pending_has_(PENDING_MAX_LOAD_CURRENT))
     this->max_load_current_number_->publish_state(max_dis);
+  if (this->bulk_voltage_number_ != nullptr && !this->pending_has_(PENDING_BULK_VOLTAGE))
+    this->bulk_voltage_number_->publish_state(bulk);
+  if (this->float_voltage_number_ != nullptr && !this->pending_has_(PENDING_FLOAT_VOLTAGE))
+    this->float_voltage_number_->publish_state(flt);
+  if (this->equalize_voltage_number_ != nullptr && !this->pending_has_(PENDING_EQUALIZE_VOLTAGE))
+    this->equalize_voltage_number_->publish_state(equalize);
+  if (this->equalize_time_number_ != nullptr && !this->pending_has_(PENDING_EQUALIZE_TIME))
+    this->equalize_time_number_->publish_state(equalize_time);
+#endif
+#ifdef USE_SELECT
+  if (this->battery_type_select_ != nullptr && !this->pending_has_(PENDING_BATTERY_TYPE) && bat_type_raw < 4)
+    this->battery_type_select_->publish_state(BATTERY_TYPE_NAMES[bat_type_raw]);
 #endif
 }
 
@@ -444,11 +479,31 @@ void ESmart3Component::parse_log_(const uint8_t *d, size_t len) {
 void ESmart3Component::parse_proparam_(const uint8_t *d, size_t len) {
   if (len < PROPARAM_WORDS * 2)
     return;
+  float load_ovp = word_(d, 1) / 10.0f;
+  float load_uvp = word_(d, 2) / 10.0f;
+  float bat_ovp = word_(d, 3) / 10.0f;
+  float bat_ovp_recover = word_(d, 4) / 10.0f;
+  float bat_uvp = word_(d, 5) / 10.0f;
+  float bat_uvp_recover = word_(d, 6) / 10.0f;
 #ifdef USE_SENSOR
   if (this->battery_ovp_sensor_ != nullptr)
-    this->battery_ovp_sensor_->publish_state(word_(d, 3) / 10.0f);
+    this->battery_ovp_sensor_->publish_state(bat_ovp);
   if (this->battery_uvp_sensor_ != nullptr)
-    this->battery_uvp_sensor_->publish_state(word_(d, 5) / 10.0f);
+    this->battery_uvp_sensor_->publish_state(bat_uvp);
+#endif
+#ifdef USE_NUMBER
+  if (this->load_ovp_number_ != nullptr && !this->pending_has_(PENDING_LOAD_OVP))
+    this->load_ovp_number_->publish_state(load_ovp);
+  if (this->load_uvp_number_ != nullptr && !this->pending_has_(PENDING_LOAD_UVP))
+    this->load_uvp_number_->publish_state(load_uvp);
+  if (this->battery_ovp_number_ != nullptr && !this->pending_has_(PENDING_BATTERY_OVP))
+    this->battery_ovp_number_->publish_state(bat_ovp);
+  if (this->battery_ovp_recover_number_ != nullptr && !this->pending_has_(PENDING_BATTERY_OVP_RECOVER))
+    this->battery_ovp_recover_number_->publish_state(bat_ovp_recover);
+  if (this->battery_uvp_number_ != nullptr && !this->pending_has_(PENDING_BATTERY_UVP))
+    this->battery_uvp_number_->publish_state(bat_uvp);
+  if (this->battery_uvp_recover_number_ != nullptr && !this->pending_has_(PENDING_BATTERY_UVP_RECOVER))
+    this->battery_uvp_recover_number_->publish_state(bat_uvp_recover);
 #endif
 }
 
@@ -457,7 +512,7 @@ void ESmart3Component::parse_loadparam_(const uint8_t *d, size_t len) {
     return;
   bool load_on = word_(d, 15) != 0;  // wLoadSts
 #ifdef USE_SWITCH
-  if (this->load_switch_ != nullptr && !this->pending_load_)
+  if (this->load_switch_ != nullptr && !this->pending_has_(PENDING_LOAD_STATE))
     this->load_switch_->publish_state(load_on);
 #endif
 }
@@ -499,8 +554,7 @@ void ESmart3Component::set_max_charge_current(float amps) {
     amps = 0;
   if (amps > 60)
     amps = 60;
-  this->pending_chg_ = true;
-  this->pending_chg_val_ = amps;
+  this->enqueue_write_(ITEM_BATPARAM, 0x05, (uint16_t) (amps * 10.0f), PENDING_MAX_CHARGE_CURRENT);
   ESP_LOGD(TAG, "Courant de charge max demandé: %.1f A", amps);
 #ifdef USE_NUMBER
   if (this->max_charge_current_number_ != nullptr)
@@ -513,8 +567,7 @@ void ESmart3Component::set_max_load_current(float amps) {
     amps = 0;
   if (amps > 40)
     amps = 40;
-  this->pending_loadcur_ = true;
-  this->pending_loadcur_val_ = amps;
+  this->enqueue_write_(ITEM_BATPARAM, 0x06, (uint16_t) (amps * 10.0f), PENDING_MAX_LOAD_CURRENT);
 #ifdef USE_NUMBER
   if (this->max_load_current_number_ != nullptr)
     this->max_load_current_number_->publish_state(amps);
@@ -522,22 +575,156 @@ void ESmart3Component::set_max_load_current(float amps) {
 }
 
 void ESmart3Component::set_load_state(bool on) {
-  this->pending_load_ = true;
-  this->pending_load_val_ = on;
+  this->enqueue_write_(ITEM_LOADPARAM, 0x01, on ? 5117 : 5118, PENDING_LOAD_STATE);
 #ifdef USE_SWITCH
   if (this->load_switch_ != nullptr)
     this->load_switch_->publish_state(on);
 #endif
 }
 
+void ESmart3Component::set_bulk_voltage(float volts) {
+  this->enqueue_write_(ITEM_BATPARAM, 0x03, (uint16_t) (volts * 10.0f), PENDING_BULK_VOLTAGE);
+#ifdef USE_NUMBER
+  if (this->bulk_voltage_number_ != nullptr)
+    this->bulk_voltage_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_float_voltage(float volts) {
+  this->enqueue_write_(ITEM_BATPARAM, 0x04, (uint16_t) (volts * 10.0f), PENDING_FLOAT_VOLTAGE);
+#ifdef USE_NUMBER
+  if (this->float_voltage_number_ != nullptr)
+    this->float_voltage_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_equalize_voltage(float volts) {
+  this->enqueue_write_(ITEM_BATPARAM, 0x07, (uint16_t) (volts * 10.0f), PENDING_EQUALIZE_VOLTAGE);
+#ifdef USE_NUMBER
+  if (this->equalize_voltage_number_ != nullptr)
+    this->equalize_voltage_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_equalize_time(uint16_t minutes) {
+  this->enqueue_write_(ITEM_BATPARAM, 0x08, minutes, PENDING_EQUALIZE_TIME);
+#ifdef USE_NUMBER
+  if (this->equalize_time_number_ != nullptr)
+    this->equalize_time_number_->publish_state(minutes);
+#endif
+}
+
+void ESmart3Component::set_battery_type(uint8_t type) {
+  if (type > 3)
+    type = 3;
+  this->enqueue_write_(ITEM_BATPARAM, 0x01, type, PENDING_BATTERY_TYPE);
+#ifdef USE_SELECT
+  if (this->battery_type_select_ != nullptr)
+    this->battery_type_select_->publish_state(BATTERY_TYPE_NAMES[type]);
+#endif
+}
+
+void ESmart3Component::set_load_ovp(float volts) {
+  this->enqueue_write_(ITEM_PROPARAM, 0x01, (uint16_t) (volts * 10.0f), PENDING_LOAD_OVP);
+#ifdef USE_NUMBER
+  if (this->load_ovp_number_ != nullptr)
+    this->load_ovp_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_load_uvp(float volts) {
+  this->enqueue_write_(ITEM_PROPARAM, 0x02, (uint16_t) (volts * 10.0f), PENDING_LOAD_UVP);
+#ifdef USE_NUMBER
+  if (this->load_uvp_number_ != nullptr)
+    this->load_uvp_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_battery_ovp(float volts) {
+  this->enqueue_write_(ITEM_PROPARAM, 0x03, (uint16_t) (volts * 10.0f), PENDING_BATTERY_OVP);
+#ifdef USE_NUMBER
+  if (this->battery_ovp_number_ != nullptr)
+    this->battery_ovp_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_battery_ovp_recover(float volts) {
+  this->enqueue_write_(ITEM_PROPARAM, 0x04, (uint16_t) (volts * 10.0f), PENDING_BATTERY_OVP_RECOVER);
+#ifdef USE_NUMBER
+  if (this->battery_ovp_recover_number_ != nullptr)
+    this->battery_ovp_recover_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_battery_uvp(float volts) {
+  this->enqueue_write_(ITEM_PROPARAM, 0x05, (uint16_t) (volts * 10.0f), PENDING_BATTERY_UVP);
+#ifdef USE_NUMBER
+  if (this->battery_uvp_number_ != nullptr)
+    this->battery_uvp_number_->publish_state(volts);
+#endif
+}
+
+void ESmart3Component::set_battery_uvp_recover(float volts) {
+  this->enqueue_write_(ITEM_PROPARAM, 0x06, (uint16_t) (volts * 10.0f), PENDING_BATTERY_UVP_RECOVER);
+#ifdef USE_NUMBER
+  if (this->battery_uvp_recover_number_ != nullptr)
+    this->battery_uvp_recover_number_->publish_state(volts);
+#endif
+}
+
 #ifdef USE_NUMBER
 void ESmart3Number::control(float value) {
-  if (this->purpose_ == 2) {
-    this->parent_->set_max_load_current(value);
-  } else {
-    this->parent_->set_max_charge_current(value);
+  // purpose_ correspond aux valeurs de ESmart3Component::PendingKind
+  // (3=LOAD_STATE et 8=BATTERY_TYPE ne sont pas utilisés ici : switch/select)
+  switch (this->purpose_) {
+    case 2:
+      this->parent_->set_max_load_current(value);
+      break;
+    case 4:
+      this->parent_->set_bulk_voltage(value);
+      break;
+    case 5:
+      this->parent_->set_float_voltage(value);
+      break;
+    case 6:
+      this->parent_->set_equalize_voltage(value);
+      break;
+    case 7:
+      this->parent_->set_equalize_time((uint16_t) value);
+      break;
+    case 9:
+      this->parent_->set_load_ovp(value);
+      break;
+    case 10:
+      this->parent_->set_load_uvp(value);
+      break;
+    case 11:
+      this->parent_->set_battery_ovp(value);
+      break;
+    case 12:
+      this->parent_->set_battery_ovp_recover(value);
+      break;
+    case 13:
+      this->parent_->set_battery_uvp(value);
+      break;
+    case 14:
+      this->parent_->set_battery_uvp_recover(value);
+      break;
+    default:
+      this->parent_->set_max_charge_current(value);
+      break;
   }
   this->publish_state(value);
+}
+#endif
+
+#ifdef USE_SELECT
+void ESmart3BatteryTypeSelect::control(const std::string &value) {
+  auto index = this->index_of(value);
+  if (index.has_value()) {
+    this->parent_->set_battery_type((uint8_t) *index);
+    this->publish_state(value);
+  }
 }
 #endif
 

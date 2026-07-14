@@ -74,20 +74,20 @@ sensor:
     load_energy_total:
       name: "MPPT Load Énergie totale"
     bulk_voltage:
-      name: "MPPT Tension Bulk"
+      name: "MPPT Tension Bulk (lu)"
     float_voltage:
-      name: "MPPT Tension Float"
+      name: "MPPT Tension Float (lu)"
     equalize_voltage:
-      name: "MPPT Tension Égalisation"
+      name: "MPPT Tension Égalisation (lu)"
     max_charge_current:
       name: "MPPT Courant charge max (lu)"
       id: mppt_max_charge_current
     max_discharge_current:
       name: "MPPT Courant load max (lu)"
     battery_ovp:
-      name: "MPPT Batterie OVP"
+      name: "MPPT Batterie OVP (lu)"
     battery_uvp:
-      name: "MPPT Batterie UVP"
+      name: "MPPT Batterie UVP (lu)"
 
 binary_sensor:
   - platform: esmart3
@@ -120,6 +120,34 @@ number:
       id: mppt_max_charge_current_number
     max_load_current:
       name: "MPPT Courant load max"
+    # --- Paramètres batterie (BatParam) ---
+    bulk_voltage:
+      name: "MPPT Tension Bulk"
+    float_voltage:
+      name: "MPPT Tension Float"
+    equalize_voltage:
+      name: "MPPT Tension Égalisation"
+    equalize_time:
+      name: "MPPT Durée égalisation"
+    # --- Paramètres de protection (ProParam) ---
+    load_ovp:
+      name: "MPPT Load OVP"
+    load_uvp:
+      name: "MPPT Load UVP"
+    battery_ovp:
+      name: "MPPT Batterie OVP"
+    battery_ovp_recover:
+      name: "MPPT Batterie OVP (récupération)"
+    battery_uvp:
+      name: "MPPT Batterie UVP"
+    battery_uvp_recover:
+      name: "MPPT Batterie UVP (récupération)"
+
+select:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    battery_type:
+      name: "MPPT Type de batterie"
 
 switch:
   - platform: esmart3

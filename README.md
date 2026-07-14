@@ -25,6 +25,10 @@ Le JK BMS n'est **pas** géré par ce device : l'ESP32 classique n'a que 3 UART
 matériels (logger + PZEM + eSmart3 les occupent déjà) et le JK BMS est déjà
 suivi par un device ESP32 séparé (`jk-bms` / esp32-ble-v19-dual_bms.yaml).
 
+Batterie JBD supposée 8S (8 cellules) : seules `cell_voltage_1` à `_8` sont
+déclarées dans `packages/jbd_bms_ble.yaml` (au-delà, l'entité reste toujours
+"Inconnu"). Décommenter `cell_voltage_9` à `_16` pour une batterie plus grande.
+
 ## Structure
 
 ```
@@ -51,9 +55,18 @@ Aucun composant ESPHome n'existait pour l'eSmart3 : le protocole (trames
 LoadParam/Information) a été porté depuis la lib Joba_ESmart3 du projet
 d'origine, en non-bloquant (machine à états dans `loop()`).
 
-Expose : capteurs PV/batterie/load/énergies/défauts, mode de charge,
-`number` **Courant charge max** (écrit `wMaxChgCurr`), `number` courant load
-max, `switch` sortie load, état de connexion.
+Expose : capteurs PV/batterie/load/énergies/défauts, mode de charge, état de
+connexion, `switch` sortie load, et en écriture (`number`/`select`) :
+- Courant de charge max, courant load max (`BatParam`)
+- Tension Bulk/Float/Égalisation, durée d'égalisation, type de batterie
+  (`select` Utilisateur/Plomb-acide/Gel/AGM) (`BatParam`)
+- Seuils de protection Load OVP/UVP, Batterie OVP/UVP (+ récupération)
+  (`ProParam`)
+
+Chaque paramètre écriture est aussi disponible en `sensor` lecture seule
+(suffixe "(lu)") pour historiser sa valeur sans dépendre de l'état d'un
+`number`. Les écritures sont mises en file (une par transaction RS485) et
+relues automatiquement après confirmation (ACK) pour rafraîchir l'affichage.
 
 ## Protection batterie
 

@@ -26,6 +26,9 @@
 #ifdef USE_NUMBER
 #include "esphome/components/number/number.h"
 #endif
+#ifdef USE_SELECT
+#include "esphome/components/select/select.h"
+#endif
 #ifdef USE_SWITCH
 #include "esphome/components/switch/switch.h"
 #endif
@@ -48,6 +51,23 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   void set_max_load_current(float amps);
   void set_load_state(bool on);
   bool is_online() const { return this->online_; }
+
+  // Paramètres batterie (BatParam) - "Factory default" doc Joba_ESmart3 :
+  // BulkVolt 14.4V, FloatVolt 13.7V, EqualizeChgVolt 14.6V, EqualizeChgTime 30min
+  void set_bulk_voltage(float volts);
+  void set_float_voltage(float volts);
+  void set_equalize_voltage(float volts);
+  void set_equalize_time(uint16_t minutes);
+  void set_battery_type(uint8_t type);  // 0=Utilisateur,1=Plomb-acide,2=Gel,3=AGM
+
+  // Paramètres de protection (ProParam) - "Factory default" doc :
+  // LoadOvp 16V, LoadUvp 10.5V, BatOvp 16V, BatOvB(recover) 15V, BatUvp 10.5V, BatUvB(recover) 11V
+  void set_load_ovp(float volts);
+  void set_load_uvp(float volts);
+  void set_battery_ovp(float volts);
+  void set_battery_ovp_recover(float volts);
+  void set_battery_uvp(float volts);
+  void set_battery_uvp_recover(float volts);
 
 #ifdef USE_SENSOR
   void set_pv_voltage_sensor(sensor::Sensor *s) { this->pv_voltage_sensor_ = s; }
@@ -93,6 +113,19 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
 #ifdef USE_NUMBER
   void set_max_charge_current_number(number::Number *n) { this->max_charge_current_number_ = n; }
   void set_max_load_current_number(number::Number *n) { this->max_load_current_number_ = n; }
+  void set_bulk_voltage_number(number::Number *n) { this->bulk_voltage_number_ = n; }
+  void set_float_voltage_number(number::Number *n) { this->float_voltage_number_ = n; }
+  void set_equalize_voltage_number(number::Number *n) { this->equalize_voltage_number_ = n; }
+  void set_equalize_time_number(number::Number *n) { this->equalize_time_number_ = n; }
+  void set_load_ovp_number(number::Number *n) { this->load_ovp_number_ = n; }
+  void set_load_uvp_number(number::Number *n) { this->load_uvp_number_ = n; }
+  void set_battery_ovp_number(number::Number *n) { this->battery_ovp_number_ = n; }
+  void set_battery_ovp_recover_number(number::Number *n) { this->battery_ovp_recover_number_ = n; }
+  void set_battery_uvp_number(number::Number *n) { this->battery_uvp_number_ = n; }
+  void set_battery_uvp_recover_number(number::Number *n) { this->battery_uvp_recover_number_ = n; }
+#endif
+#ifdef USE_SELECT
+  void set_battery_type_select(select::Select *s) { this->battery_type_select_ = s; }
 #endif
 #ifdef USE_SWITCH
   void set_load_switch(switch_::Switch *s) { this->load_switch_ = s; }
@@ -115,9 +148,35 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   };
   enum Cmd : uint8_t { CMD_ACK = 0, CMD_GET = 1, CMD_SET = 2, CMD_SET_NO_RESP = 3, CMD_NACK = 4, CMD_EXEC = 5 };
 
+  // Identifie la donnée locale à rafraîchir/relire une fois l'écriture confirmée (ACK)
+  enum PendingKind : uint8_t {
+    PENDING_MAX_CHARGE_CURRENT = 1,
+    PENDING_MAX_LOAD_CURRENT = 2,
+    PENDING_LOAD_STATE = 3,
+    PENDING_BULK_VOLTAGE = 4,
+    PENDING_FLOAT_VOLTAGE = 5,
+    PENDING_EQUALIZE_VOLTAGE = 6,
+    PENDING_EQUALIZE_TIME = 7,
+    PENDING_BATTERY_TYPE = 8,
+    PENDING_LOAD_OVP = 9,
+    PENDING_LOAD_UVP = 10,
+    PENDING_BATTERY_OVP = 11,
+    PENDING_BATTERY_OVP_RECOVER = 12,
+    PENDING_BATTERY_UVP = 13,
+    PENDING_BATTERY_UVP_RECOVER = 14,
+  };
+  struct PendingWrite {
+    uint8_t item;
+    uint8_t word_offset;
+    uint16_t raw_value;
+    uint8_t kind;
+  };
+
   void send_frame_(uint8_t cmd, uint8_t item, const uint8_t *payload, size_t payload_len);
   void send_get_(uint8_t item, uint8_t start_word, uint8_t end_word);
   void send_set_word_(uint8_t item, uint8_t start_word, uint16_t value);
+  void enqueue_write_(uint8_t item, uint8_t word_offset, uint16_t raw_value, uint8_t kind);
+  bool pending_has_(uint8_t kind) const;
   bool try_send_pending_();
   void handle_frame_(const uint8_t *frame, size_t data_len);
   void on_success_();
@@ -143,7 +202,7 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   bool waiting_{false};
   bool expect_ack_{false};
   uint8_t expected_item_{0xff};
-  uint8_t pending_write_kind_{0};  // 1=chg current, 2=load current, 3=load on/off
+  uint8_t pending_write_kind_{0};
   uint32_t last_tx_{0};
   uint32_t last_frame_{0};
   uint8_t cycle_{0};
@@ -151,14 +210,10 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   bool online_{false};
   bool info_read_{false};
   bool force_batparam_{false};
+  bool force_proparam_{false};
 
-  // Commandes en attente (appliquées dès que le bus est libre)
-  bool pending_chg_{false};
-  float pending_chg_val_{0};
-  bool pending_loadcur_{false};
-  float pending_loadcur_val_{0};
-  bool pending_load_{false};
-  bool pending_load_val_{false};
+  // File des écritures en attente (appliquées dès que le bus est libre, une à la fois)
+  std::vector<PendingWrite> pending_queue_;
 
 #ifdef USE_SENSOR
   sensor::Sensor *pv_voltage_sensor_{nullptr};
@@ -204,6 +259,19 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
 #ifdef USE_NUMBER
   number::Number *max_charge_current_number_{nullptr};
   number::Number *max_load_current_number_{nullptr};
+  number::Number *bulk_voltage_number_{nullptr};
+  number::Number *float_voltage_number_{nullptr};
+  number::Number *equalize_voltage_number_{nullptr};
+  number::Number *equalize_time_number_{nullptr};
+  number::Number *load_ovp_number_{nullptr};
+  number::Number *load_uvp_number_{nullptr};
+  number::Number *battery_ovp_number_{nullptr};
+  number::Number *battery_ovp_recover_number_{nullptr};
+  number::Number *battery_uvp_number_{nullptr};
+  number::Number *battery_uvp_recover_number_{nullptr};
+#endif
+#ifdef USE_SELECT
+  select::Select *battery_type_select_{nullptr};
 #endif
 #ifdef USE_SWITCH
   switch_::Switch *load_switch_{nullptr};
@@ -213,12 +281,19 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
 #ifdef USE_NUMBER
 class ESmart3Number : public number::Number, public Parented<ESmart3Component> {
  public:
-  // 1 = courant de charge max (wMaxChgCurr), 2 = courant load max (wMaxDisChgCurr)
+  // Correspond à ESmart3Component::PendingKind (1-14, hors LOAD_STATE géré par le switch)
   void set_purpose(uint8_t purpose) { this->purpose_ = purpose; }
 
  protected:
   void control(float value) override;
   uint8_t purpose_{1};
+};
+#endif
+
+#ifdef USE_SELECT
+class ESmart3BatteryTypeSelect : public select::Select, public Parented<ESmart3Component> {
+ protected:
+  void control(const std::string &value) override;
 };
 #endif
 

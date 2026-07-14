@@ -75,22 +75,24 @@ sensor:
       name: "Batterie Cellule 7"
     cell_voltage_8:
       name: "Batterie Cellule 8"
-    cell_voltage_9:
-      name: "Batterie Cellule 9"
-    cell_voltage_10:
-      name: "Batterie Cellule 10"
-    cell_voltage_11:
-      name: "Batterie Cellule 11"
-    cell_voltage_12:
-      name: "Batterie Cellule 12"
-    cell_voltage_13:
-      name: "Batterie Cellule 13"
-    cell_voltage_14:
-      name: "Batterie Cellule 14"
-    cell_voltage_15:
-      name: "Batterie Cellule 15"
-    cell_voltage_16:
-      name: "Batterie Cellule 16"
+    # Cellules 9-16 non déclarées : batterie 8S, toujours "Inconnu" sinon.
+    # Décommenter si une batterie avec plus de 8 cellules est utilisée.
+    # cell_voltage_9:
+    #   name: "Batterie Cellule 9"
+    # cell_voltage_10:
+    #   name: "Batterie Cellule 10"
+    # cell_voltage_11:
+    #   name: "Batterie Cellule 11"
+    # cell_voltage_12:
+    #   name: "Batterie Cellule 12"
+    # cell_voltage_13:
+    #   name: "Batterie Cellule 13"
+    # cell_voltage_14:
+    #   name: "Batterie Cellule 14"
+    # cell_voltage_15:
+    #   name: "Batterie Cellule 15"
+    # cell_voltage_16:
+    #   name: "Batterie Cellule 16"
 
 binary_sensor:
   - platform: jbd_bms_ble
