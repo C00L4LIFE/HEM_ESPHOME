@@ -1,8 +1,11 @@
 #pragma once
 
+// SPDX-License-Identifier: GPL-2.0-only
+//
 // Composant ESPHome pour contrôleur de charge solaire eSmart3 (RS485, 9600 8N1).
-// Protocole porté depuis la lib Joba_ESmart3 utilisée par le projet
-// Home_Energy_Management (trames 0xAA, CRC 8 bits = négation de la somme).
+// Protocole porté depuis la lib Joba_ESmart3 (Joachim Banzhaf, GPL V2)
+// utilisée par le projet Home_Energy_Management
+// (trames 0xAA, CRC 8 bits = négation de la somme).
 
 #include <vector>
 

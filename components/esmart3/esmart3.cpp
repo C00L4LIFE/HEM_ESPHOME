@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
 #include "esmart3.h"
 #include "esphome/core/log.h"
 

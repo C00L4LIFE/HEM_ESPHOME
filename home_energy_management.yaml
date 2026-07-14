@@ -1,6 +1,7 @@
 # =============================================================================
 # Home Energy Management - Version ESPHome
 # Portage du projet C++ Home_Energy_Management (PlatformIO/Arduino)
+# https://github.com/C00L4LIFE/HEM_ESPHOME
 # =============================================================================
 # Matériel :
 #   - ESP32 DevKit (esp32dev)

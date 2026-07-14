@@ -1,8 +1,13 @@
 # HEM_ESPHOME — Home Energy Management, version ESPHome
 
-Portage ESPHome du projet C++ [Home_Energy_Management](../Home_Energy_Management)
-(PlatformIO / Arduino). Même matériel, mêmes pins, même logique de protection
-batterie — mais en configuration YAML avec intégration Home Assistant native.
+[![ESPHome](https://img.shields.io/badge/ESPHome-2026.6-blue)](https://esphome.io)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
+
+Dépôt : <https://github.com/C00L4LIFE/HEM_ESPHOME>
+
+Portage ESPHome du projet C++ Home_Energy_Management (PlatformIO / Arduino).
+Même matériel, mêmes pins, même logique de protection batterie — mais en
+configuration YAML avec intégration Home Assistant native.
 
 ## Matériel (identique au projet d'origine)
 
@@ -70,13 +75,40 @@ Interrupteur global **Protection batterie active**.
 
 ```bash
 pip install esphome
+git clone https://github.com/C00L4LIFE/HEM_ESPHOME.git
 cd HEM_ESPHOME
-# Renseigner secrets.yaml (surtout jbd_bms_mac_address)
+cp secrets.yaml.example secrets.yaml
+# Renseigner secrets.yaml (WiFi, MQTT et surtout jbd_bms_mac_address)
 esphome run home_energy_management.yaml
 ```
 
 Premier flash par USB, ensuite OTA. Les composants syssi sont téléchargés
 automatiquement depuis GitHub à la compilation.
+
+## Réutiliser le composant `esmart3` dans un autre projet
+
+Le composant est utilisable directement depuis ce dépôt, sans cloner :
+
+```yaml
+external_components:
+  - source: github://C00L4LIFE/HEM_ESPHOME@main
+    components: [esmart3]
+
+uart:
+  - id: uart_esmart3
+    rx_pin: 16
+    tx_pin: 17
+    baud_rate: 9600
+
+esmart3:
+  id: esmart3_hub
+  uart_id: uart_esmart3
+  flow_control_pin: 4   # DE/RE du transceiver RS485 (optionnel)
+  update_interval: 1s
+```
+
+Voir [packages/mppt_esmart3.yaml](packages/mppt_esmart3.yaml) pour la liste
+complète des capteurs, `number` et `switch` disponibles.
 
 ## Correspondance avec le projet d'origine
 
@@ -116,3 +148,9 @@ Avec `mqtt:` + discovery, toutes les entités apparaissent automatiquement.
 Si vous préférez l'API native ESPHome (recommandé si tout passe par HA),
 commentez `mqtt:` et décommentez `api:` dans `packages/mqtt.yaml` pour éviter
 les entités en double.
+
+## Licence
+
+GPL-2.0 (voir [LICENSE](LICENSE)) — le composant `esmart3` est un portage de
+la bibliothèque [Joba_ESmart3](https://github.com/joba-1/Joba_ESmart3) de
+Joachim Banzhaf, publiée sous GPL V2.
