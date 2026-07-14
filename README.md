@@ -108,13 +108,23 @@ Premier flash par USB, ensuite OTA.
 
 ### Mettre à jour après un push sur `main`
 
-`refresh: 1d` : les sources distantes sont mises en cache 24 h. Pour forcer
-la prise en compte immédiate d'un changement poussé sur GitHub :
+`refresh: 1d` : les sources distantes (`packages:` et `external_components:`)
+sont mises en cache 24 h. **Cliquer sur "Installer"/"Update" dans l'add-on
+ne suffit pas** à forcer un re-téléchargement — le cache est conservé.
+
+En CLI :
 
 ```bash
 esphome clean home_energy_management.yaml
 esphome run home_energy_management.yaml
 ```
+
+Dans l'add-on ESPHome Device Builder de Home Assistant (pas d'accès CLI
+direct) : ouvrir un gestionnaire de fichiers (add-on "Studio Code Server"
+ou "File editor") sur `/config/esphome/`, supprimer le dossier `.esphome/`
+(uniquement du cache, aucune perte), puis relancer "Installer" sur le
+device. Vérifier ensuite dans les logs qu'aucune ligne `[mqtt:...]` (ancien
+canal, remplacé par `api:`) n'apparaît — sinon le cache n'a pas été purgé.
 
 ### Développer en local (modifier ce dépôt)
 
