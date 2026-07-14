@@ -29,7 +29,7 @@ home_energy_management.yaml   Fichier principal (pins, board, packages)
 secrets.yaml                  Identifiants WiFi/MQTT, MAC JBD (non commité)
 packages/
   wifi.yaml                   STA + AP secours + portail captif
-  mqtt.yaml                   MQTT discovery Home Assistant (ou API native)
+  mqtt.yaml                   API native Home Assistant (MQTT en option)
   system.yaml                 OTA, web server, NTP + DS3231, watchdog MPPT
   gpio.yaml                   4 relais + 4 entrées
   pzem.yaml                   2× PZEM-004T v3 (pzemac natif)
@@ -86,7 +86,8 @@ mkdir hem && cd hem
 curl -O https://raw.githubusercontent.com/C00L4LIFE/HEM_ESPHOME/main/home_energy_management.yaml
 curl -O https://raw.githubusercontent.com/C00L4LIFE/HEM_ESPHOME/main/secrets.yaml.example
 cp secrets.yaml.example secrets.yaml
-# Renseigner secrets.yaml (WiFi, MQTT et surtout jbd_bms_mac_address)
+# Renseigner secrets.yaml : WiFi, jbd_bms_mac_address, et générer une
+# api_encryption_key unique (voir commentaire dans le fichier)
 esphome run home_energy_management.yaml
 ```
 
@@ -154,7 +155,7 @@ complète des capteurs, `number` et `switch` disponibles.
 | `wifi_manager.cpp` | `wifi:` + `ap:` + `captive_portal:` |
 | `time_manager.cpp` | `time: sntp` + `ds1307` (write au sync NTP, read au boot) |
 | `web_server.cpp` + HTML | `web_server:` v3 (interface générique ESPHome) |
-| `ha_manager.cpp` | `mqtt:` discovery (ou `api:` native, voir mqtt.yaml) |
+| `ha_manager.cpp` | `api:` native (MQTT en option, voir mqtt.yaml) |
 | `ota_manager.cpp` | `ota:` + `safe_mode:` |
 | `mppt_manager.cpp` + Joba_ESmart3 | `components/esmart3` (custom) |
 | `jk_bms.cpp` | `syssi/esphome-jk-bms` (jk_modbus RS485) |
@@ -181,10 +182,19 @@ complète des capteurs, `number` et `switch` disponibles.
 
 ## Home Assistant
 
-Avec `mqtt:` + discovery, toutes les entités apparaissent automatiquement.
-Si vous préférez l'API native ESPHome (recommandé si tout passe par HA),
-commentez `mqtt:` et décommentez `api:` dans `packages/mqtt.yaml` pour éviter
-les entités en double.
+`api:` (native ESPHome) est actif par défaut : Home Assistant découvre le
+device automatiquement (intégration ESPHome), sans dépendre d'un broker
+MQTT tiers — c'est aussi ce canal qu'utilisent `esphome logs` et l'add-on
+ESPHome pour streamer les logs. Nécessite `api_encryption_key` dans
+`secrets.yaml` (voir `secrets.yaml.example`).
+
+Si un autre système que Home Assistant doit consommer les topics MQTT
+`hem/XXXX/...` (ex. Node-RED), décommentez le bloc `mqtt:` dans
+`packages/mqtt.yaml` **en plus** de `api:` — passez alors `discovery: false`
+côté MQTT pour éviter les entités HA en double. Utilisez une adresse IP ou
+un hostname complet pour `mqtt_broker` : un nom court (ex. `"al"`) peut
+échouer avec `Errno 22 Invalid argument` selon la résolution DNS du
+conteneur qui exécute ESPHome.
 
 ## Licence
 
