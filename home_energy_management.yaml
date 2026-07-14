@@ -56,26 +56,37 @@ esp32:
 
 # Composant custom eSmart3 (portage du protocole Joba_ESmart3)
 # + composants syssi pour JK BMS (RS485) et JBD BMS (BLE)
+# Les trois sont récupérés depuis GitHub (comme pour dual BMS) : ce fichier
+# et secrets.yaml suffisent, pas besoin de cloner packages/ ni components/.
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://C00L4LIFE/HEM_ESPHOME@main
+    components: [esmart3]
+    refresh: 1d
   - source: github://syssi/esphome-jk-bms@main
     refresh: 1d
   - source: github://syssi/esphome-jbd-bms@main
     refresh: 1d
 
+# Packages récupérés depuis GitHub (même mécanisme que external_components
+# ci-dessus). refresh: 1d => après une modification poussée sur main, relancer
+# `esphome clean home_energy_management.yaml` pour forcer le re-téléchargement
+# immédiatement au lieu d'attendre l'expiration du cache.
 packages:
-  wifi: !include packages/wifi.yaml
-  mqtt: !include packages/mqtt.yaml
-  system: !include packages/system.yaml
-  gpio: !include packages/gpio.yaml
-  pzem: !include packages/pzem.yaml
-  mppt: !include packages/mppt_esmart3.yaml
-  jk_bms: !include packages/jk_bms.yaml
-  jbd_bms: !include packages/jbd_bms_ble.yaml
-  protection: !include packages/battery_protection.yaml
-  energy: !include packages/energy.yaml
+  hem:
+    url: https://github.com/C00L4LIFE/HEM_ESPHOME
+    ref: main
+    refresh: 1d
+    files:
+      - packages/wifi.yaml
+      - packages/mqtt.yaml
+      - packages/system.yaml
+      - packages/gpio.yaml
+      - packages/pzem.yaml
+      - packages/mppt_esmart3.yaml
+      - packages/jk_bms.yaml
+      - packages/jbd_bms_ble.yaml
+      - packages/battery_protection.yaml
+      - packages/energy.yaml
 
 logger:
   level: INFO

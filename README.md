@@ -73,17 +73,54 @@ Interrupteur global **Protection batterie active**.
 
 ## Installation
 
+`packages:` et `external_components:` pointent tous les trois directement
+vers GitHub (même mécanisme que les composants syssi) : **seuls
+`home_energy_management.yaml` et `secrets.yaml` sont nécessaires**, pas
+besoin de cloner `packages/` ni `components/` à la main.
+
+### Sur un poste (CLI / VS Code + ESPHome)
+
 ```bash
 pip install esphome
-git clone https://github.com/C00L4LIFE/HEM_ESPHOME.git
-cd HEM_ESPHOME
+mkdir hem && cd hem
+curl -O https://raw.githubusercontent.com/C00L4LIFE/HEM_ESPHOME/main/home_energy_management.yaml
+curl -O https://raw.githubusercontent.com/C00L4LIFE/HEM_ESPHOME/main/secrets.yaml.example
 cp secrets.yaml.example secrets.yaml
 # Renseigner secrets.yaml (WiFi, MQTT et surtout jbd_bms_mac_address)
 esphome run home_energy_management.yaml
 ```
 
-Premier flash par USB, ensuite OTA. Les composants syssi sont téléchargés
-automatiquement depuis GitHub à la compilation.
+(Cloner le dépôt entier fonctionne aussi et reste utile pour lire/modifier
+les packages en local — voir la section suivante.)
+
+### Dans l'add-on ESPHome de Home Assistant
+
+Copier uniquement `home_energy_management.yaml` dans `/config/esphome/`,
+puis dans le même dossier créer `secrets.yaml` (à partir de
+[secrets.yaml.example](secrets.yaml.example)). Les packages, le composant
+`esmart3` et les composants syssi sont récupérés automatiquement depuis
+GitHub à la compilation — inutile de copier `packages/` ou `components/`.
+
+Premier flash par USB, ensuite OTA.
+
+### Mettre à jour après un push sur `main`
+
+`refresh: 1d` : les sources distantes sont mises en cache 24 h. Pour forcer
+la prise en compte immédiate d'un changement poussé sur GitHub :
+
+```bash
+esphome clean home_energy_management.yaml
+esphome run home_energy_management.yaml
+```
+
+### Développer en local (modifier ce dépôt)
+
+Pour tester une modification de `packages/*.yaml` ou de `components/esmart3`
+**avant** de la pousser sur GitHub, cloner le dépôt et remplacer
+temporairement, dans `home_energy_management.yaml`, le bloc `packages:` par
+des `!include packages/xxx.yaml` locaux et la source `esmart3` par
+`type: local, path: components` — sinon la config continue de compiler la
+dernière version publiée sur `main`, pas vos fichiers locaux non poussés.
 
 ## Réutiliser le composant `esmart3` dans un autre projet
 
