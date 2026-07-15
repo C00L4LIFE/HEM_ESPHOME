@@ -120,12 +120,16 @@ bool ESmart3Component::pending_has_(uint8_t kind) const {
 }
 
 bool ESmart3Component::try_send_pending_() {
-  if (this->pending_reset_energy_) {
-    // Remet à zéro dwTodayEng..dwLoadTotalEng (mots 6 à 21 inclus, 32 octets)
-    // en une seule trame SET sur l'item Log.
-    static const uint8_t zeros[32] = {0};
+  if (this->reset_energy_step_ >= 0) {
+    // Un seul SET de 32 octets laisse les mots hauts de certains dwords
+    // inchangés sur ce contrôleur (Load*Eng observés à 0x10000 au lieu de 0
+    // après un reset en bloc) : écritures séparées, une par dword (4 octets),
+    // offsets dwTodayEng/dwMonthEng/dwTotalEng/dwLoadTodayEng/
+    // dwLoadMonthEng/dwLoadTotalEng.
+    static const uint8_t RESET_OFFSETS[6] = {6, 10, 14, 16, 18, 20};
+    static const uint8_t zero_dword[4] = {0, 0, 0, 0};
     this->pending_write_kind_ = PENDING_RESET_ENERGY;
-    this->send_set_bytes_(ITEM_LOG, 0x06, zeros, sizeof(zeros));
+    this->send_set_bytes_(ITEM_LOG, RESET_OFFSETS[this->reset_energy_step_], zero_dword, sizeof(zero_dword));
     return true;
   }
   if (this->pending_queue_.empty())
@@ -273,11 +277,15 @@ void ESmart3Component::handle_frame_(const uint8_t *frame, size_t len) {
     bool ok = (command == CMD_ACK);
     if (this->pending_write_kind_ == PENDING_RESET_ENERGY) {
       if (ok) {
-        this->pending_reset_energy_ = false;
-        this->force_log_ = true;  // relire pour rafraîchir les sensors immédiatement
-        ESP_LOGI(TAG, "Statistiques d'énergie réinitialisées");
+        this->reset_energy_step_++;
+        if (this->reset_energy_step_ >= 6) {
+          this->reset_energy_step_ = -1;
+          this->force_log_ = true;  // relire pour rafraîchir les sensors immédiatement
+          ESP_LOGI(TAG, "Statistiques d'énergie réinitialisées");
+        }
       } else {
-        ESP_LOGW(TAG, "Réinitialisation énergie refusée (NACK), nouvelle tentative au prochain cycle");
+        ESP_LOGW(TAG, "Réinitialisation énergie (étape %d) refusée (NACK), nouvelle tentative au prochain cycle",
+                 this->reset_energy_step_);
       }
       this->pending_write_kind_ = 0;
       return;
@@ -702,7 +710,7 @@ void ESmart3Component::set_system_voltage_mode(uint8_t mode) {
 }
 
 void ESmart3Component::reset_energy_stats() {
-  this->pending_reset_energy_ = true;
+  this->reset_energy_step_ = 0;
   ESP_LOGD(TAG, "Réinitialisation des statistiques d'énergie demandée");
 }
 
