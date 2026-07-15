@@ -7,7 +7,15 @@
 
 uart:
   - id: uart_pzem
-    rx_pin: ${pzem_rx_pin}
+    # Pull-up interne sur RX : la sortie TTL du PZEM passe par un
+    # optocoupleur qui peut laisser la ligne flottante au repos. Le
+    # framework Arduino (utilisé par le firmware d'origine) l'active
+    # souvent par défaut ; ESP-IDF (utilisé ici) ne le fait pas.
+    rx_pin:
+      number: ${pzem_rx_pin}
+      mode:
+        input: true
+        pullup: true
     tx_pin: ${pzem_tx_pin}
     baud_rate: 9600
 
