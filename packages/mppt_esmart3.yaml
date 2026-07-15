@@ -185,6 +185,15 @@ select:
           id(esmart3_hub).set_system_voltage_mode(mode);
           id(mppt_system_voltage_mode).publish_state(x);
 
+# Remet à zéro les compteurs d'énergie du contrôleur (Today/Month/Total,
+# générés et consommés) - item Log, "Read and write" selon le protocole
+# officiel. Utile si ces registres contiennent des valeurs incohérentes.
+button:
+  - platform: esmart3
+    esmart3_id: esmart3_hub
+    reset_energy:
+      name: "MPPT Réinitialiser statistiques énergie"
+
 switch:
   - platform: esmart3
     esmart3_id: esmart3_hub

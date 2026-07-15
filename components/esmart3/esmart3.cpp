@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <cstring>
+
 #include "esmart3.h"
 #include "esphome/core/log.h"
 
@@ -86,6 +88,16 @@ void ESmart3Component::send_set_word_(uint8_t item, uint8_t start_word, uint16_t
   this->send_frame_(CMD_SET, item, payload, sizeof(payload));
 }
 
+void ESmart3Component::send_set_bytes_(uint8_t item, uint8_t start_word, const uint8_t *data, uint8_t data_len) {
+  uint8_t payload[2 + 120];
+  payload[0] = start_word;
+  payload[1] = 0;
+  memcpy(&payload[2], data, data_len);
+  this->expect_ack_ = true;
+  this->expected_item_ = item;
+  this->send_frame_(CMD_SET, item, payload, 2 + data_len);
+}
+
 void ESmart3Component::enqueue_write_(uint8_t item, uint8_t word_offset, uint16_t raw_value, uint8_t kind) {
   // Remplace une écriture déjà en attente pour le même paramètre (évite l'empilement
   // si l'utilisateur bouge un slider plusieurs fois avant que le bus se libère)
@@ -108,6 +120,14 @@ bool ESmart3Component::pending_has_(uint8_t kind) const {
 }
 
 bool ESmart3Component::try_send_pending_() {
+  if (this->pending_reset_energy_) {
+    // Remet à zéro dwTodayEng..dwLoadTotalEng (mots 6 à 21 inclus, 32 octets)
+    // en une seule trame SET sur l'item Log.
+    static const uint8_t zeros[32] = {0};
+    this->pending_write_kind_ = PENDING_RESET_ENERGY;
+    this->send_set_bytes_(ITEM_LOG, 0x06, zeros, sizeof(zeros));
+    return true;
+  }
   if (this->pending_queue_.empty())
     return false;
   const PendingWrite &w = this->pending_queue_.front();
@@ -138,6 +158,11 @@ void ESmart3Component::update() {
   if (this->force_proparam_) {
     this->force_proparam_ = false;
     this->send_get_(ITEM_PROPARAM, 0, PROPARAM_WORDS);
+    return;
+  }
+  if (this->force_log_) {
+    this->force_log_ = false;
+    this->send_get_(ITEM_LOG, 0, LOG_WORDS);
     return;
   }
 
@@ -246,6 +271,17 @@ void ESmart3Component::handle_frame_(const uint8_t *frame, size_t len) {
 
   if (this->expect_ack_) {
     bool ok = (command == CMD_ACK);
+    if (this->pending_write_kind_ == PENDING_RESET_ENERGY) {
+      if (ok) {
+        this->pending_reset_energy_ = false;
+        this->force_log_ = true;  // relire pour rafraîchir les sensors immédiatement
+        ESP_LOGI(TAG, "Statistiques d'énergie réinitialisées");
+      } else {
+        ESP_LOGW(TAG, "Réinitialisation énergie refusée (NACK), nouvelle tentative au prochain cycle");
+      }
+      this->pending_write_kind_ = 0;
+      return;
+    }
     if (ok && !this->pending_queue_.empty()) {
       uint8_t kind = this->pending_queue_.front().kind;
       this->pending_queue_.erase(this->pending_queue_.begin());
@@ -663,6 +699,11 @@ void ESmart3Component::set_system_voltage_mode(uint8_t mode) {
   // Relire BatParam/ProParam pour republier les tensions déjà connues avec le nouveau facteur
   this->force_batparam_ = true;
   this->force_proparam_ = true;
+}
+
+void ESmart3Component::reset_energy_stats() {
+  this->pending_reset_energy_ = true;
+  ESP_LOGD(TAG, "Réinitialisation des statistiques d'énergie demandée");
 }
 
 void ESmart3Component::set_battery_type(uint8_t type) {

@@ -32,6 +32,9 @@
 #ifdef USE_SWITCH
 #include "esphome/components/switch/switch.h"
 #endif
+#ifdef USE_BUTTON
+#include "esphome/components/button/button.h"
+#endif
 
 namespace esphome {
 namespace esmart3 {
@@ -74,6 +77,11 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   // réel). mode : 0=Auto (détecté depuis la tension batterie), 1=12V, 2=24V,
   // 3=36V, 4=48V (facteur = mode directement en mode manuel).
   void set_system_voltage_mode(uint8_t mode);
+
+  // Remet à zéro les compteurs d'énergie du contrôleur (item Log : Today/
+  // Month/Total générés et consommés). Utile quand ces registres contiennent
+  // des valeurs incohérentes (ex. compteurs "Total" non initialisés/corrompus).
+  void reset_energy_stats();
 
 #ifdef USE_SENSOR
   void set_pv_voltage_sensor(sensor::Sensor *s) { this->pv_voltage_sensor_ = s; }
@@ -171,6 +179,7 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
     PENDING_BATTERY_OVP_RECOVER = 12,
     PENDING_BATTERY_UVP = 13,
     PENDING_BATTERY_UVP_RECOVER = 14,
+    PENDING_RESET_ENERGY = 15,
   };
   struct PendingWrite {
     uint8_t item;
@@ -182,6 +191,7 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   void send_frame_(uint8_t cmd, uint8_t item, const uint8_t *payload, size_t payload_len);
   void send_get_(uint8_t item, uint8_t start_word, uint8_t end_word);
   void send_set_word_(uint8_t item, uint8_t start_word, uint16_t value);
+  void send_set_bytes_(uint8_t item, uint8_t start_word, const uint8_t *data, uint8_t data_len);
   void enqueue_write_(uint8_t item, uint8_t word_offset, uint16_t raw_value, uint8_t kind);
   bool pending_has_(uint8_t kind) const;
   bool try_send_pending_();
@@ -218,6 +228,8 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   bool info_read_{false};
   bool force_batparam_{false};
   bool force_proparam_{false};
+  bool force_log_{false};
+  bool pending_reset_energy_{false};
   uint8_t system_voltage_mode_{0};       // 0=Auto, 1..4 = 12V/24V/36V/48V
   float system_voltage_factor_{1.0f};    // multiplicateur appliqué aux tensions BatParam/ProParam
 
@@ -287,6 +299,13 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   switch_::Switch *load_switch_{nullptr};
 #endif
 };
+
+#ifdef USE_BUTTON
+class ESmart3ResetEnergyButton : public button::Button, public Parented<ESmart3Component> {
+ protected:
+  void press_action() override { this->parent_->reset_energy_stats(); }
+};
+#endif
 
 #ifdef USE_NUMBER
 class ESmart3Number : public number::Number, public Parented<ESmart3Component> {
