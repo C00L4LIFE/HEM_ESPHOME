@@ -211,7 +211,14 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   }
   static int16_t sword_(const uint8_t *d, size_t idx) { return (int16_t) word_(d, idx); }
   static uint32_t dword_(const uint8_t *d, size_t idx) {
-    return (uint32_t) word_(d, idx) | ((uint32_t) word_(d, idx + 1) << 16);
+    // Uint32s du protocole officiel = { Uint16 wHi16; Uint16 wLow16; } :
+    // le mot de POIDS FORT est transmis en premier (chaque mot en octets
+    // little-endian). Confirmé par l'exemple de la doc (123456789 =
+    // 0x075BCD15 transmis "5B 07 15 CD" = 0x075B puis 0xCD15) et vérifié
+    // sur le matériel (compteurs d'énergie incrémentant le 2e mot).
+    // NB : le texte d'intro de la doc ("low words in front") contredit sa
+    // propre structure et son propre exemple - c'est l'exemple qui est juste.
+    return ((uint32_t) word_(d, idx) << 16) | (uint32_t) word_(d, idx + 1);
   }
 
   GPIOPin *flow_control_pin_{nullptr};
@@ -232,12 +239,10 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   // Étape courante du reset énergie (-1 = inactif). Écritures séparées, une
   // par dword (voir try_send_pending_), plutôt qu'un seul SET de 32 octets -
   // approche plus prudente/conforme aux autres écritures de ce composant.
-  // Limite matérielle observée (pas liée à cette implémentation) : les
-  // compteurs dwLoadTodayEng/MonthEng/TotalEng (énergie Load consommée)
-  // reviennent seuls à 0x10000 (65536) quelques secondes après un reset
-  // réussi - le contrôleur semble les recalculer depuis une source interne
-  // que ce protocole ne permet pas de réinitialiser. Les compteurs de
-  // génération PV (dwTodayEng/MonthEng/TotalEng), eux, restent bien à 0.
+  // (Le "0x10000 qui revient tout seul après reset" observé à une époque
+  // n'était PAS une limite matérielle : c'était le compteur Load qui avait
+  // simplement ré-accumulé 1 Wh, affiché 65536 à cause d'un bug d'ordre des
+  // mots dans dword_ - corrigé depuis. Le reset fonctionne intégralement.)
   int8_t reset_energy_step_{-1};
   uint8_t system_voltage_mode_{0};       // 0=Auto, 1..4 = 12V/24V/36V/48V
   float system_voltage_factor_{1.0f};    // multiplicateur appliqué aux tensions BatParam/ProParam

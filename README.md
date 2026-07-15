@@ -247,15 +247,6 @@ complète des capteurs, `number` et `switch` disponibles.
 - **Énergie PZEM mensuelle/totale séparée** : `pzemac` n'expose qu'un
   compteur `energy` cumulé (contrairement aux registres MPPT internes qui
   distinguent jour/mois/total).
-- **Reset des compteurs "Load" (consommation) via le bouton MPPT** :
-  temporaire seulement. Testé sur le matériel : le SET écrit correctement
-  0 sur `dwLoadTodayEng`/`dwLoadMonthEng`/`dwLoadTotalEng` (confirmé
-  immédiatement après l'appui), mais le contrôleur les recalcule seul à
-  `0x10000` (65536 Wh) une dizaine de secondes plus tard — probablement
-  depuis un compteur interne que ce protocole ne permet pas de
-  réinitialiser. Le reset des compteurs de **génération PV** (Today/Month/
-  Total), lui, persiste normalement.
-
 ## Corrections notables
 
 - **Température batterie/contrôleur MPPT** : les registres eSmart3
@@ -275,6 +266,20 @@ complète des capteurs, `number` et `switch` disponibles.
   changé sans retirer la division, sous-évaluant le résultat de 1000×).
 - **CO2 économisé** : `dwCO2` est documenté "0.1kg" (÷10), pas "0.001kg"
   (÷1000) — affichait 100× trop bas.
+- **Ordre des mots dans les valeurs 32 bits** (`dwTodayEng`, `dwMonthEng`,
+  `dwTotalEng`, `dwLoad*Eng`, `dwCO2`, `dwRunTime`) : le protocole définit
+  `Uint32s { wHi16; wLow16 }` — **mot de poids fort transmis en premier**
+  (confirmé par l'exemple de la doc : `123456789` = `0x075BCD15` transmis
+  `5B 07 15 CD`, et vérifié sur le matériel : les compteurs incrémentaient
+  le 2ᵉ mot). Le décodage lisait le premier mot comme poids faible, gonflant
+  les valeurs par un facteur ~65536 (ex. "Load Énergie totale" affichée
+  37 421 056 Wh au lieu de 571 Wh réels). Ce bug expliquait aussi les deux
+  fausses pistes précédentes, corrigées ici : le "registre Total corrompu
+  côté contrôleur" (valeur réelle ≈ 1 064 kWh, parfaitement plausible) et le
+  "reset des compteurs Load qui ne persiste pas" (le reset fonctionnait ;
+  le compteur avait juste ré-accumulé 1 Wh, affiché 65536). NB : la lib
+  Joba_ESmart3 d'origine (memcpy dans un `uint32_t` little-endian) avait le
+  même bug.
 
 ## Home Assistant
 
