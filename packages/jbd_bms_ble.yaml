@@ -41,9 +41,9 @@ sensor:
     discharging_power:
       name: "Batterie Puissance de décharge"
       id: jbd_discharging_power
-    battery_cycle_capacity:
-      name: "Batterie Capacité cyclée cumulée"
-      id: jbd_cycle_capacity
+    # battery_cycle_capacity : clé acceptée par le schéma du composant mais
+    # jamais publiée par la variante BLE (jbd_bms_ble.cpp) - resterait
+    # "Inconnu" en permanence. Ne pas réactiver sans vérifier le composant.
     state_of_charge:
       name: "Batterie SoC"
       id: jbd_soc

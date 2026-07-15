@@ -37,8 +37,11 @@ substitutions:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
-  # Équivalent de l'ID unique hem-XXXX du projet d'origine (suffixe MAC)
-  name_add_mac_suffix: true
+  # Pas de name_add_mac_suffix : le Device Builder (add-on HA) détecte l'état
+  # en ligne en résolvant "<name>.local" en mDNS, sans connaître le suffixe
+  # MAC - avec le suffixe, le device apparaissait "Hors ligne" et l'OTA
+  # depuis l'add-on échouait, alors que tout fonctionnait par IP. Un seul
+  # device HEM existe, l'unicité du nom (hem-XXXX d'origine) est inutile ici.
   on_boot:
     priority: -100
     then:
