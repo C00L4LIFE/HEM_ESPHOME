@@ -14,7 +14,6 @@ from esphome.const import (
     UNIT_AMPERE,
     UNIT_CELSIUS,
     UNIT_KILOGRAM,
-    UNIT_KILOWATT_HOURS,
     UNIT_PERCENT,
     UNIT_VOLT,
     UNIT_WATT,
@@ -101,15 +100,6 @@ def energy_wh_schema():
     )
 
 
-def energy_kwh_schema():
-    return sensor.sensor_schema(
-        unit_of_measurement=UNIT_KILOWATT_HOURS,
-        accuracy_decimals=2,
-        device_class=DEVICE_CLASS_ENERGY,
-        state_class=STATE_CLASS_TOTAL_INCREASING,
-    )
-
-
 SENSORS = {
     CONF_PV_VOLTAGE: voltage_schema(),
     CONF_PV_CURRENT: current_schema(),
@@ -142,11 +132,15 @@ SENSORS = {
         accuracy_decimals=0,
     ),
     CONF_ENERGY_TODAY: energy_wh_schema(),
-    CONF_ENERGY_MONTH: energy_kwh_schema(),
-    CONF_ENERGY_TOTAL: energy_kwh_schema(),
+    # Note : dwMonthEng/dwTotalEng (divisés par 1000 dans esmart3.cpp) donnent
+    # en réalité une valeur en Wh, pas en kWh - bug de libellé déjà présent
+    # dans ha_manager.cpp d'origine (entités déclarées "kWh" alors que le
+    # calcul mppt_manager.cpp produit du Wh). Calcul inchangé, unité corrigée.
+    CONF_ENERGY_MONTH: energy_wh_schema(),
+    CONF_ENERGY_TOTAL: energy_wh_schema(),
     CONF_LOAD_ENERGY_TODAY: energy_wh_schema(),
-    CONF_LOAD_ENERGY_MONTH: energy_kwh_schema(),
-    CONF_LOAD_ENERGY_TOTAL: energy_kwh_schema(),
+    CONF_LOAD_ENERGY_MONTH: energy_wh_schema(),
+    CONF_LOAD_ENERGY_TOTAL: energy_wh_schema(),
     CONF_BULK_VOLTAGE: voltage_schema(),
     CONF_FLOAT_VOLTAGE: voltage_schema(),
     CONF_EQUALIZE_VOLTAGE: voltage_schema(),
