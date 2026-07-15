@@ -258,6 +258,15 @@ complète des capteurs, `number` et `switch` disponibles.
   étaient assemblées dans le mauvais ordre (octet fort avant l'octet
   faible), ce qui inversait chaque paire de lettres (ex. "Seamtr-306-APMTP"
   au lieu de "eSmart3-60A-MPPT").
+- **Énergie MPPT mensuelle/totale (générée et consommée)** : confirmé dans
+  la doc protocole officielle (`§7.1.3 Run log`) que `dwMonthEng`/
+  `dwTotalEng`/`dwLoad*Eng` sont tous en **1 Wh** (valeur brute directe,
+  aucune division) — le firmware d'origine divisait par 1000 en les
+  qualifiant de kWh, une double erreur (calcul et libellé) reproduite puis
+  seulement à moitié corrigée dans une itération précédente (libellé
+  changé sans retirer la division, sous-évaluant le résultat de 1000×).
+- **CO2 économisé** : `dwCO2` est documenté "0.1kg" (÷10), pas "0.001kg"
+  (÷1000) — affichait 100× trop bas.
 
 ## Home Assistant
 

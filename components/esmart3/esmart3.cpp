@@ -351,7 +351,8 @@ void ESmart3Component::parse_chgsts_(const uint8_t *d, size_t len) {
   float bat_temp = sword_(d, 9);
   float inner_temp = sword_(d, 10);
   uint16_t bat_cap = word_(d, 11);
-  float co2 = dword_(d, 12) / 1000.0f;
+  // dwCO2 documenté "0.1kg" dans le protocole officiel (pas 0.001kg/1000)
+  float co2 = dword_(d, 12) / 10.0f;
   uint16_t fault = word_(d, 14);
 
 #ifdef USE_SENSOR
@@ -487,19 +488,26 @@ void ESmart3Component::parse_batparam_(const uint8_t *d, size_t len) {
 void ESmart3Component::parse_log_(const uint8_t *d, size_t len) {
   if (len < LOG_WORDS * 2)
     return;
+  // Doc protocole officielle (esmart3-serial-comm.txt, §7.1.3 Run log) :
+  // dwTodayEng/dwMonthEng/dwTotalEng/dwLoadTodayEng/dwLoadMonthEng/
+  // dwLoadTotalEng sont TOUS documentés "1wh" - valeur brute directement en
+  // Wh, sans aucune division. Le firmware d'origine (mppt_manager.cpp)
+  // divisait month/total par 1000 en les qualifiant de kWh : erreur de
+  // calcul (pas seulement d'unité) reproduite puis seulement à moitié
+  // corrigée ici précédemment (libellé changé sans retirer la division).
 #ifdef USE_SENSOR
   if (this->energy_today_sensor_ != nullptr)
     this->energy_today_sensor_->publish_state(dword_(d, 6));  // Wh
   if (this->energy_month_sensor_ != nullptr)
-    this->energy_month_sensor_->publish_state(dword_(d, 10) / 1000.0f);  // kWh
+    this->energy_month_sensor_->publish_state(dword_(d, 10));  // Wh
   if (this->energy_total_sensor_ != nullptr)
-    this->energy_total_sensor_->publish_state(dword_(d, 14) / 1000.0f);  // kWh
+    this->energy_total_sensor_->publish_state(dword_(d, 14));  // Wh
   if (this->load_energy_today_sensor_ != nullptr)
     this->load_energy_today_sensor_->publish_state(dword_(d, 16));  // Wh
   if (this->load_energy_month_sensor_ != nullptr)
-    this->load_energy_month_sensor_->publish_state(dword_(d, 18) / 1000.0f);  // kWh
+    this->load_energy_month_sensor_->publish_state(dword_(d, 18));  // Wh
   if (this->load_energy_total_sensor_ != nullptr)
-    this->load_energy_total_sensor_->publish_state(dword_(d, 20) / 1000.0f);  // kWh
+    this->load_energy_total_sensor_->publish_state(dword_(d, 20));  // Wh
 #endif
 }
 
