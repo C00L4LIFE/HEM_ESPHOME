@@ -487,6 +487,25 @@ void ESmart3Component::parse_batparam_(const uint8_t *d, size_t len) {
 void ESmart3Component::parse_log_(const uint8_t *d, size_t len) {
   if (len < LOG_WORDS * 2)
     return;
+
+  // DEBUG TEMPORAIRE : dump brut de la trame Log pour diagnostiquer des
+  // valeurs d'énergie aberrantes (à retirer une fois le problème identifié)
+  {
+    char hex[LOG_WORDS * 2 * 3 + 1];
+    char *p = hex;
+    size_t n = len < (size_t) (LOG_WORDS * 2) ? len : (size_t) (LOG_WORDS * 2);
+    for (size_t i = 0; i < n; i++)
+      p += snprintf(p, 4, "%02X ", d[i]);
+    ESP_LOGI(TAG, "Log brut (%u octets): %s", (unsigned) len, hex);
+    ESP_LOGI(TAG,
+             "Log mots: wFlag(w0)=%u dwRunTime(w1-2)=%u wStartCnt(w3)=%u wFaultCnt(w5)=%u "
+             "dwTodayEng(w6)=%u dwMonthEng(w10)=%u dwTotalEng(w14)=%u "
+             "dwLoadTodayEng(w16)=%u dwLoadMonthEng(w18)=%u dwLoadTotalEng(w20)=%u",
+             (unsigned) word_(d, 0), (unsigned) dword_(d, 1), (unsigned) word_(d, 3), (unsigned) word_(d, 5),
+             (unsigned) dword_(d, 6), (unsigned) dword_(d, 10), (unsigned) dword_(d, 14),
+             (unsigned) dword_(d, 16), (unsigned) dword_(d, 18), (unsigned) dword_(d, 20));
+  }
+
 #ifdef USE_SENSOR
   if (this->energy_today_sensor_ != nullptr)
     this->energy_today_sensor_->publish_state(dword_(d, 6));  // Wh
