@@ -247,6 +247,14 @@ complète des capteurs, `number` et `switch` disponibles.
 - **Énergie PZEM mensuelle/totale séparée** : `pzemac` n'expose qu'un
   compteur `energy` cumulé (contrairement aux registres MPPT internes qui
   distinguent jour/mois/total).
+- **Reset des compteurs "Load" (consommation) via le bouton MPPT** :
+  temporaire seulement. Testé sur le matériel : le SET écrit correctement
+  0 sur `dwLoadTodayEng`/`dwLoadMonthEng`/`dwLoadTotalEng` (confirmé
+  immédiatement après l'appui), mais le contrôleur les recalcule seul à
+  `0x10000` (65536 Wh) une dizaine de secondes plus tard — probablement
+  depuis un compteur interne que ce protocole ne permet pas de
+  réinitialiser. Le reset des compteurs de **génération PV** (Today/Month/
+  Total), lui, persiste normalement.
 
 ## Corrections notables
 

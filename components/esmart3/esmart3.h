@@ -230,9 +230,14 @@ class ESmart3Component : public PollingComponent, public uart::UARTDevice {
   bool force_proparam_{false};
   bool force_log_{false};
   // Étape courante du reset énergie (-1 = inactif). Écritures séparées, une
-  // par dword (voir try_send_pending_) : un unique SET de 32 octets laisse
-  // les mots hauts de certains champs non modifiés sur ce contrôleur
-  // (observé : Load*Eng affichant 0x10000 au lieu de 0 après un reset en bloc).
+  // par dword (voir try_send_pending_), plutôt qu'un seul SET de 32 octets -
+  // approche plus prudente/conforme aux autres écritures de ce composant.
+  // Limite matérielle observée (pas liée à cette implémentation) : les
+  // compteurs dwLoadTodayEng/MonthEng/TotalEng (énergie Load consommée)
+  // reviennent seuls à 0x10000 (65536) quelques secondes après un reset
+  // réussi - le contrôleur semble les recalculer depuis une source interne
+  // que ce protocole ne permet pas de réinitialiser. Les compteurs de
+  // génération PV (dwTodayEng/MonthEng/TotalEng), eux, restent bien à 0.
   int8_t reset_energy_step_{-1};
   uint8_t system_voltage_mode_{0};       // 0=Auto, 1..4 = 12V/24V/36V/48V
   float system_voltage_factor_{1.0f};    // multiplicateur appliqué aux tensions BatParam/ProParam

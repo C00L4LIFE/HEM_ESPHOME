@@ -188,6 +188,11 @@ select:
 # Remet à zéro les compteurs d'énergie du contrôleur (Today/Month/Total,
 # générés et consommés) - item Log, "Read and write" selon le protocole
 # officiel. Utile si ces registres contiennent des valeurs incohérentes.
+# Limite matérielle observée : le reset des compteurs "Load" (consommation)
+# est temporaire - le contrôleur les recalcule seul à 0x10000 (65536 Wh)
+# quelques secondes plus tard, probablement depuis un compteur interne que
+# ce protocole ne permet pas de réinitialiser. Le reset des compteurs de
+# génération PV, lui, persiste normalement.
 button:
   - platform: esmart3
     esmart3_id: esmart3_hub

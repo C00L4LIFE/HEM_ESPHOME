@@ -121,11 +121,12 @@ bool ESmart3Component::pending_has_(uint8_t kind) const {
 
 bool ESmart3Component::try_send_pending_() {
   if (this->reset_energy_step_ >= 0) {
-    // Un seul SET de 32 octets laisse les mots hauts de certains dwords
-    // inchangés sur ce contrôleur (Load*Eng observés à 0x10000 au lieu de 0
-    // après un reset en bloc) : écritures séparées, une par dword (4 octets),
-    // offsets dwTodayEng/dwMonthEng/dwTotalEng/dwLoadTodayEng/
-    // dwLoadMonthEng/dwLoadTotalEng.
+    // Écritures séparées, une par dword (4 octets), plutôt qu'un seul SET
+    // de 32 octets - offsets dwTodayEng/dwMonthEng/dwTotalEng/
+    // dwLoadTodayEng/dwLoadMonthEng/dwLoadTotalEng. Note : dwLoad*Eng
+    // reviennent seuls à 0x10000 quelques secondes après un reset réussi
+    // (limite du contrôleur, pas de cette écriture - voir commentaire sur
+    // reset_energy_step_ dans le .h).
     static const uint8_t RESET_OFFSETS[6] = {6, 10, 14, 16, 18, 20};
     static const uint8_t zero_dword[4] = {0, 0, 0, 0};
     this->pending_write_kind_ = PENDING_RESET_ENERGY;
