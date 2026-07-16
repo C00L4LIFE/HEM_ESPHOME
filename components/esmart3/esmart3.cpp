@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <cmath>
 #include <cstring>
 
 #include "esmart3.h"
@@ -9,6 +10,16 @@ namespace esphome {
 namespace esmart3 {
 
 static const char *const TAG = "esmart3";
+
+// Conversion en dixièmes (registres eSmart3) avec arrondi : un simple cast
+// (uint16_t) tronque, et l'imprécision du flottant fait qu'une valeur comme
+// 27.9f * 10.0f peut valoir 278.99998 au lieu de 279.0 -> tronqué à 278
+// (27.8 V au lieu de 27.9 V). Les valeurs entières (ex. 28.0) tombent
+// pile sur un entier flottant et ne sont pas affectées, d'où le symptôme
+// "les nombres à virgule ne s'enregistrent pas".
+static uint16_t round_deci_(float value) {
+  return (uint16_t) lroundf(value);
+}
 
 // Tailles des structures en mots de 16 bits (protocole Feb 2018)
 static const uint8_t CHGSTS_WORDS = 16;
@@ -635,7 +646,7 @@ void ESmart3Component::set_max_charge_current(float amps) {
     amps = 0;
   if (amps > 60)
     amps = 60;
-  this->enqueue_write_(ITEM_BATPARAM, 0x05, (uint16_t) (amps * 10.0f), PENDING_MAX_CHARGE_CURRENT);
+  this->enqueue_write_(ITEM_BATPARAM, 0x05, round_deci_(amps * 10.0f), PENDING_MAX_CHARGE_CURRENT);
   ESP_LOGD(TAG, "Courant de charge max demandé: %.1f A", amps);
 #ifdef USE_NUMBER
   if (this->max_charge_current_number_ != nullptr)
@@ -648,7 +659,7 @@ void ESmart3Component::set_max_load_current(float amps) {
     amps = 0;
   if (amps > 40)
     amps = 40;
-  this->enqueue_write_(ITEM_BATPARAM, 0x06, (uint16_t) (amps * 10.0f), PENDING_MAX_LOAD_CURRENT);
+  this->enqueue_write_(ITEM_BATPARAM, 0x06, round_deci_(amps * 10.0f), PENDING_MAX_LOAD_CURRENT);
 #ifdef USE_NUMBER
   if (this->max_load_current_number_ != nullptr)
     this->max_load_current_number_->publish_state(amps);
@@ -665,7 +676,7 @@ void ESmart3Component::set_load_state(bool on) {
 
 void ESmart3Component::set_bulk_voltage(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_BATPARAM, 0x03, (uint16_t) (volts / f * 10.0f), PENDING_BULK_VOLTAGE);
+  this->enqueue_write_(ITEM_BATPARAM, 0x03, round_deci_(volts / f * 10.0f), PENDING_BULK_VOLTAGE);
 #ifdef USE_NUMBER
   if (this->bulk_voltage_number_ != nullptr)
     this->bulk_voltage_number_->publish_state(volts);
@@ -674,7 +685,7 @@ void ESmart3Component::set_bulk_voltage(float volts) {
 
 void ESmart3Component::set_float_voltage(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_BATPARAM, 0x04, (uint16_t) (volts / f * 10.0f), PENDING_FLOAT_VOLTAGE);
+  this->enqueue_write_(ITEM_BATPARAM, 0x04, round_deci_(volts / f * 10.0f), PENDING_FLOAT_VOLTAGE);
 #ifdef USE_NUMBER
   if (this->float_voltage_number_ != nullptr)
     this->float_voltage_number_->publish_state(volts);
@@ -683,7 +694,7 @@ void ESmart3Component::set_float_voltage(float volts) {
 
 void ESmart3Component::set_equalize_voltage(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_BATPARAM, 0x07, (uint16_t) (volts / f * 10.0f), PENDING_EQUALIZE_VOLTAGE);
+  this->enqueue_write_(ITEM_BATPARAM, 0x07, round_deci_(volts / f * 10.0f), PENDING_EQUALIZE_VOLTAGE);
 #ifdef USE_NUMBER
   if (this->equalize_voltage_number_ != nullptr)
     this->equalize_voltage_number_->publish_state(volts);
@@ -726,7 +737,7 @@ void ESmart3Component::set_battery_type(uint8_t type) {
 
 void ESmart3Component::set_load_ovp(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_PROPARAM, 0x01, (uint16_t) (volts / f * 10.0f), PENDING_LOAD_OVP);
+  this->enqueue_write_(ITEM_PROPARAM, 0x01, round_deci_(volts / f * 10.0f), PENDING_LOAD_OVP);
 #ifdef USE_NUMBER
   if (this->load_ovp_number_ != nullptr)
     this->load_ovp_number_->publish_state(volts);
@@ -735,7 +746,7 @@ void ESmart3Component::set_load_ovp(float volts) {
 
 void ESmart3Component::set_load_uvp(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_PROPARAM, 0x02, (uint16_t) (volts / f * 10.0f), PENDING_LOAD_UVP);
+  this->enqueue_write_(ITEM_PROPARAM, 0x02, round_deci_(volts / f * 10.0f), PENDING_LOAD_UVP);
 #ifdef USE_NUMBER
   if (this->load_uvp_number_ != nullptr)
     this->load_uvp_number_->publish_state(volts);
@@ -744,7 +755,7 @@ void ESmart3Component::set_load_uvp(float volts) {
 
 void ESmart3Component::set_battery_ovp(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_PROPARAM, 0x03, (uint16_t) (volts / f * 10.0f), PENDING_BATTERY_OVP);
+  this->enqueue_write_(ITEM_PROPARAM, 0x03, round_deci_(volts / f * 10.0f), PENDING_BATTERY_OVP);
 #ifdef USE_NUMBER
   if (this->battery_ovp_number_ != nullptr)
     this->battery_ovp_number_->publish_state(volts);
@@ -753,7 +764,7 @@ void ESmart3Component::set_battery_ovp(float volts) {
 
 void ESmart3Component::set_battery_ovp_recover(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_PROPARAM, 0x04, (uint16_t) (volts / f * 10.0f), PENDING_BATTERY_OVP_RECOVER);
+  this->enqueue_write_(ITEM_PROPARAM, 0x04, round_deci_(volts / f * 10.0f), PENDING_BATTERY_OVP_RECOVER);
 #ifdef USE_NUMBER
   if (this->battery_ovp_recover_number_ != nullptr)
     this->battery_ovp_recover_number_->publish_state(volts);
@@ -762,7 +773,7 @@ void ESmart3Component::set_battery_ovp_recover(float volts) {
 
 void ESmart3Component::set_battery_uvp(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_PROPARAM, 0x05, (uint16_t) (volts / f * 10.0f), PENDING_BATTERY_UVP);
+  this->enqueue_write_(ITEM_PROPARAM, 0x05, round_deci_(volts / f * 10.0f), PENDING_BATTERY_UVP);
 #ifdef USE_NUMBER
   if (this->battery_uvp_number_ != nullptr)
     this->battery_uvp_number_->publish_state(volts);
@@ -771,7 +782,7 @@ void ESmart3Component::set_battery_uvp(float volts) {
 
 void ESmart3Component::set_battery_uvp_recover(float volts) {
   float f = this->system_voltage_factor_ > 0 ? this->system_voltage_factor_ : 1.0f;
-  this->enqueue_write_(ITEM_PROPARAM, 0x06, (uint16_t) (volts / f * 10.0f), PENDING_BATTERY_UVP_RECOVER);
+  this->enqueue_write_(ITEM_PROPARAM, 0x06, round_deci_(volts / f * 10.0f), PENDING_BATTERY_UVP_RECOVER);
 #ifdef USE_NUMBER
   if (this->battery_uvp_recover_number_ != nullptr)
     this->battery_uvp_recover_number_->publish_state(volts);
