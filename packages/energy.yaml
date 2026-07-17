@@ -1,7 +1,8 @@
 # =============================================================================
 # Capteurs dérivés (calculs de main.cpp / ha_manager.cpp) :
 #   - puissance maison = PV - charge batterie
-#   - puissance batterie moyennée (25 échantillons de 5 s, ~2 min)
+#   - puissance batterie lissée (table circulaire, fenêtre et intervalle
+#     réglables depuis Home Assistant - numbers "Batterie Lissage ...")
 #   - énergie restante / nominale batterie (Wh)
 #   - temps restant estimé (min ; négatif = temps de charge)
 #   - énergie batterie chargée/déchargée cumulée (kWh, tableau de bord
@@ -10,23 +11,92 @@
 #     charging_power/discharging_power dans le temps (platform: integration).
 # =============================================================================
 
+# Table circulaire du lissage de puissance batterie. Implémentée à la main
+# (plutôt que sliding_window_moving_average) parce que la taille de fenêtre
+# et l'intervalle du filtre ESPHome sont figés à la compilation, alors
+# qu'ici ils sont réglables à chaud via les numbers ci-dessous.
+globals:
+  - id: pw_avg_buffer
+    type: float[100]
+  - id: pw_avg_idx
+    type: int
+    initial_value: '0'
+  - id: pw_avg_count
+    type: int
+    initial_value: '0'
+  - id: pw_avg_last_ms
+    type: uint32_t
+    initial_value: '0'
+
+number:
+  # Nombre de lectures moyennées (taille de fenêtre effective). La table fait
+  # toujours 100 cases ; réduire la fenêtre n'utilise que les N plus récentes.
+  - platform: template
+    name: "Batterie Lissage Fenêtre"
+    id: pw_avg_window
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: 100
+    restore_value: true
+    optimistic: true
+    entity_category: config
+    mode: box
+    icon: "mdi:chart-bell-curve"
+
+  # Intervalle entre deux lectures. Fenêtre x intervalle = durée de lissage
+  # (100 x 1 s = ~1 min 40). Le BMS publie toutes les 2 s : sous 2 s certaines
+  # lectures consécutives seront identiques, sans fausser la moyenne.
+  - platform: template
+    name: "Batterie Lissage Intervalle"
+    id: pw_avg_interval
+    min_value: 1
+    max_value: 30
+    step: 1
+    initial_value: 1
+    restore_value: true
+    optimistic: true
+    entity_category: config
+    unit_of_measurement: s
+    mode: box
+    icon: "mdi:timer-outline"
+
 sensor:
-  # Puissance batterie signée (+ = charge) copiée toutes les 5 s puis moyennée
-  # sur 25 échantillons, comme batttery_avg_power du main.cpp
+  # Puissance batterie signée (+ = charge) lissée sur la table circulaire :
+  # une lecture par intervalle dans la case 0..99 (retour à 0 après 99),
+  # moyenne = somme des cases / nombre de cases ; tant que la table n'est
+  # pas pleine, seules les cases alimentées comptent.
   - platform: template
     name: "Batterie Puissance moyenne"
     id: battery_power_avg
     unit_of_measurement: W
     device_class: power
     accuracy_decimals: 1
-    update_interval: 5s
+    update_interval: 1s
     lambda: |-
-      if (isnan(id(jbd_power).state)) return {};
-      return id(jbd_power).state;
-    filters:
-      - sliding_window_moving_average:
-          window_size: 25
-          send_every: 1
+      float v = id(jbd_power).state;
+      if (isnan(v)) return {};
+      uint32_t now = millis();
+      uint32_t interval_ms = (uint32_t) id(pw_avg_interval).state * 1000;
+      if (interval_ms < 1000) interval_ms = 1000;
+      if (id(pw_avg_count) > 0 && (now - id(pw_avg_last_ms)) < interval_ms)
+        return {};  // pas encore l'heure d'échantillonner
+      id(pw_avg_last_ms) = now;
+      id(pw_avg_buffer)[id(pw_avg_idx)] = v;
+      id(pw_avg_idx) = (id(pw_avg_idx) + 1) % 100;
+      if (id(pw_avg_count) < 100)
+        id(pw_avg_count) += 1;
+      int window = (int) id(pw_avg_window).state;
+      if (window < 1) window = 1;
+      if (window > 100) window = 100;
+      int n = id(pw_avg_count) < window ? id(pw_avg_count) : window;
+      float sum = 0;
+      int pos = id(pw_avg_idx);
+      for (int i = 0; i < n; i++) {
+        pos = (pos + 99) % 100;  // recule d'une case (les n plus récentes)
+        sum += id(pw_avg_buffer)[pos];
+      }
+      return sum / n;
 
   # Puissance consommée par la maison côté DC :
   # house_power = pv_power - puissance de charge batterie
