@@ -224,15 +224,16 @@ text_sensor:
     balancing_cells:
       name: "Batterie Cellules en équilibrage"
 
-# Commandes vers le BMS (lecture à la demande + actions). Les compteurs
-# d'erreurs (registre 0xAA) ne sont PAS lus en continu par le composant :
-# le bouton dédié est pressé automatiquement toutes les 10 min (interval:
-# ci-dessous) pour les tenir à jour.
+# Commandes vers le BMS (lecture à la demande + actions). Le modèle
+# (device_model, ~"Batterie Modèle") et les compteurs d'erreurs (registre
+# 0xAA) ne sont PAS lus en continu par le composant, seulement sur appui
+# bouton : d'où l'interval ci-dessous qui les presse automatiquement.
 button:
   - platform: jbd_bms_ble
     jbd_bms_ble_id: jbd_bms0
     retrieve_hardware_version:
       name: "Batterie Relire infos matériel"
+      id: jbd_retrieve_hardware_version
       entity_category: diagnostic
     retrieve_error_counts:
       name: "Batterie Relire compteurs d'erreurs"
@@ -252,3 +253,4 @@ interval:
   - interval: 10min
     then:
       - button.press: jbd_retrieve_error_counts
+      - button.press: jbd_retrieve_hardware_version
