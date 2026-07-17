@@ -57,17 +57,73 @@ sensor:
       id: jbd_capacity_remaining
     cell_count:
       name: "Batterie Nombre de cellules"
+    software_version:
+      name: "Batterie Version logicielle"
+      entity_category: diagnostic
     min_cell_voltage:
       name: "Batterie Cellule min"
       id: jbd_min_cell_v
     max_cell_voltage:
       name: "Batterie Cellule max"
       id: jbd_max_cell_v
+    # Numéro (1..n) de la cellule la plus basse / la plus haute
+    min_voltage_cell:
+      name: "Batterie N° cellule min"
+    max_voltage_cell:
+      name: "Batterie N° cellule max"
     delta_cell_voltage:
       name: "Batterie Delta cellules"
       id: jbd_delta_cell_v
     average_cell_voltage:
       name: "Batterie Cellule moyenne"
+    # Bitmasks bruts (diagnostic) - les versions décodées en texte sont
+    # "Batterie Défauts", "Batterie État de fonctionnement" et
+    # "Batterie Cellules en équilibrage" plus bas.
+    operation_status_bitmask:
+      name: "Batterie Bitmask état"
+      entity_category: diagnostic
+    errors_bitmask:
+      name: "Batterie Bitmask défauts"
+      entity_category: diagnostic
+    balancer_status_bitmask:
+      name: "Batterie Bitmask équilibrage"
+      entity_category: diagnostic
+    # Compteurs d'erreurs cumulés par le BMS (registre EEPROM 0xAA). Ils ne
+    # se rafraîchissent que sur demande : bouton "Batterie Relire compteurs
+    # d'erreurs" (pressé automatiquement toutes les 10 min, voir interval:).
+    short_circuit_error_count:
+      name: "Batterie Compteur court-circuit"
+      entity_category: diagnostic
+    charge_overcurrent_error_count:
+      name: "Batterie Compteur surcourant charge"
+      entity_category: diagnostic
+    discharge_overcurrent_error_count:
+      name: "Batterie Compteur surcourant décharge"
+      entity_category: diagnostic
+    cell_overvoltage_error_count:
+      name: "Batterie Compteur surtension cellule"
+      entity_category: diagnostic
+    cell_undervoltage_error_count:
+      name: "Batterie Compteur sous-tension cellule"
+      entity_category: diagnostic
+    charge_overtemperature_error_count:
+      name: "Batterie Compteur surchauffe charge"
+      entity_category: diagnostic
+    charge_undertemperature_error_count:
+      name: "Batterie Compteur sous-température charge"
+      entity_category: diagnostic
+    discharge_overtemperature_error_count:
+      name: "Batterie Compteur surchauffe décharge"
+      entity_category: diagnostic
+    discharge_undertemperature_error_count:
+      name: "Batterie Compteur sous-température décharge"
+      entity_category: diagnostic
+    battery_overvoltage_error_count:
+      name: "Batterie Compteur surtension pack"
+      entity_category: diagnostic
+    battery_undervoltage_error_count:
+      name: "Batterie Compteur sous-tension pack"
+      entity_category: diagnostic
     temperature_1:
       name: "Batterie Température 1"
       id: jbd_temp_1
@@ -125,16 +181,28 @@ binary_sensor:
       name: "Batterie Défaut surtension cellule"
     cell_undervoltage_protection:
       name: "Batterie Défaut sous-tension cellule"
+    pack_overvoltage_protection:
+      name: "Batterie Défaut surtension pack"
+    pack_undervoltage_protection:
+      name: "Batterie Défaut sous-tension pack"
     charge_overtemperature_protection:
       name: "Batterie Défaut température charge"
+    charge_undertemperature_protection:
+      name: "Batterie Défaut sous-température charge"
     discharge_overtemperature_protection:
       name: "Batterie Défaut température décharge"
+    discharge_undertemperature_protection:
+      name: "Batterie Défaut sous-température décharge"
     charge_overcurrent_protection:
       name: "Batterie Défaut surcourant charge"
     discharge_overcurrent_protection:
       name: "Batterie Défaut surcourant décharge"
     short_circuit_protection:
       name: "Batterie Défaut court-circuit"
+    ic_frontend_error:
+      name: "Batterie Défaut IC frontend"
+    mosfet_software_lock:
+      name: "Batterie Verrou logiciel MOSFET"
 
 switch:
   - platform: jbd_bms_ble
@@ -149,7 +217,38 @@ text_sensor:
     jbd_bms_ble_id: jbd_bms0
     errors:
       name: "Batterie Défauts"
+    operation_status:
+      name: "Batterie État de fonctionnement"
     device_model:
       name: "Batterie Modèle"
     balancing_cells:
       name: "Batterie Cellules en équilibrage"
+
+# Commandes vers le BMS (lecture à la demande + actions). Les compteurs
+# d'erreurs (registre 0xAA) ne sont PAS lus en continu par le composant :
+# le bouton dédié est pressé automatiquement toutes les 10 min (interval:
+# ci-dessous) pour les tenir à jour.
+button:
+  - platform: jbd_bms_ble
+    jbd_bms_ble_id: jbd_bms0
+    retrieve_hardware_version:
+      name: "Batterie Relire infos matériel"
+      entity_category: diagnostic
+    retrieve_error_counts:
+      name: "Batterie Relire compteurs d'erreurs"
+      id: jbd_retrieve_error_counts
+      entity_category: diagnostic
+    force_soc_reset:
+      name: "Batterie Forcer recalcul SoC"
+      entity_category: config
+    automatic_balancing:
+      name: "Batterie Équilibrage automatique"
+      entity_category: config
+    clear_alarm:
+      name: "Batterie Effacer alarme"
+      entity_category: config
+
+interval:
+  - interval: 10min
+    then:
+      - button.press: jbd_retrieve_error_counts
