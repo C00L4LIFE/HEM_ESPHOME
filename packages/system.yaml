@@ -9,23 +9,33 @@ ota:
 
 safe_mode:
 
+# Sauvegarde NVS des compteurs d'énergie (voir packages/mppt2_shunt.yaml) :
+# écriture flash au plus toutes les 6h (usure négligeable) + flush automatique
+# au shutdown propre (OTA, restart) par le syncer de préférences. Pattern
+# repris de esphome-jk-bms_mod (commit c239f20).
+preferences:
+  flash_write_interval: 6h
+
 # Serveur web embarqué (remplace web_server.cpp + HTML custom)
 web_server:
   port: 80
   version: 3
   local: true
 
-# --- I2C pour le DS3231 ---
+# --- I2C : DS3231 (désactivé temporairement) + ADS1115 (packages/mppt2_shunt.yaml) ---
 i2c:
   sda: ${i2c_sda_pin}
   scl: ${i2c_scl_pin}
   scan: true
 
-# --- Temps : NTP avec RTC DS3231 en secours (time_manager.cpp) ---
+# --- Temps : NTP seul pour le moment ---
+# RTC DS3231 désactivé temporairement (libère le bus I2C pour l'ADS1115 du
+# shunt MPPT2). Conséquence : l'heure n'est disponible qu'après la synchro
+# NTP (quelques secondes après connexion WiFi), plus de secours hors-ligne.
+# Pour réactiver : restaurer le platform ds1307 ci-dessous, le
+# on_time_sync -> ds1307.write_time, et le ds1307.read_time dans le on_boot
+# de home_energy_management.yaml.
 time:
-  - platform: ds1307   # compatible DS3231
-    id: rtc_time
-    update_interval: never
   - platform: sntp
     id: sntp_time
     # Fuseau auto-détecté à la compilation (America/Port-au-Prince sur ce PC).
@@ -34,10 +44,6 @@ time:
       - pool.ntp.org
       - time.nist.gov
       - time.google.com
-    on_time_sync:
-      then:
-        # Sauvegarder l'heure NTP dans le DS3231
-        - ds1307.write_time:
 
 # --- LED de statut (GPIO2, clignote en cas de problème) ---
 status_led:

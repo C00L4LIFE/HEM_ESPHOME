@@ -1,0 +1,255 @@
+# =============================================================================
+# MPPT2 - deuxième contrôleur de charge solaire, sans port de communication.
+# Mesuré uniquement via un shunt 75mV/100A sur ADS1115 (entrée différentielle
+# A0-A1). Partage la même batterie que le MPPT eSmart3 : la tension est donc
+# réutilisée depuis jbd_voltage (mesure directe côté batterie), pas re-mesurée.
+#
+# Persistance de l'énergie cumulée : même schéma "offset + NVS + helper HA"
+# validé sur esphome-jk-bms_mod (commits ed978a0, c239f20) plutôt qu'un simple
+# restore: true, pour survivre à un reboot pendant que Home Assistant est
+# injoignable (NVS, restauration immédiate) tout en gardant une 2e copie
+# réseau (helper HA, mise à jour 30s) qui ne s'use pas comme la flash.
+#
+# Pré-requis côté Home Assistant (à faire une fois, sinon les capteurs
+# d'énergie restent bloqués à 0 après chaque reboot) :
+#   1. Créer un helper "input_number.hem_esphome_mppt2_energy_total"
+#      (Paramètres > Appareils et services > Assistants > Nombre), plage
+#      0 à 999999, pas 0.001 - les valeurs manipulées sont en kWh.
+#   2. Paramètres > Appareils > ESPHome > home-energy-management > Configurer
+#      > activer "Allow the device to perform Home Assistant actions"
+#      (nécessaire pour homeassistant.action / input_number.set_value).
+# =============================================================================
+
+# Adresse par défaut (ADDR relié à GND). Si le module est câblé différemment :
+# VDD -> 0x49, SDA -> 0x4A, SCL -> 0x4B (le scan I2C au boot, déjà activé
+# dans system.yaml, confirme l'adresse détectée dans les logs).
+ads1115:
+  - address: 0x48
+    id: ads1115_hub
+
+globals:
+  # Table circulaire du lissage de puissance MPPT2 (même principe réglable
+  # à chaud que "Batterie Puissance moyenne" dans energy.yaml).
+  - id: mppt2_pw_avg_buffer
+    type: float[100]
+  - id: mppt2_pw_avg_idx
+    type: int
+    initial_value: '0'
+  - id: mppt2_pw_avg_count
+    type: int
+    initial_value: '0'
+  - id: mppt2_pw_avg_last_ms
+    type: uint32_t
+    initial_value: '0'
+  # Compteur d'énergie MPPT2 (kWh) : offset = historique restauré (NVS au
+  # boot, puis relevé par le helper HA si plus grand - fusion max, jamais de
+  # recul), raw = accumulation C++ depuis le boot, total publié = offset+raw.
+  - id: mppt2_energy_offset
+    type: float
+    initial_value: '0'
+  - id: mppt2_energy_restored
+    type: bool
+    initial_value: 'false'
+  - id: nvs_mppt2_energy
+    type: float
+    restore_value: true
+    initial_value: '0'
+
+number:
+  - platform: template
+    name: "MPPT2 Lissage Fenêtre"
+    id: mppt2_pw_avg_window
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: 100
+    restore_value: true
+    optimistic: true
+    entity_category: config
+    mode: box
+    icon: "mdi:chart-bell-curve"
+  - platform: template
+    name: "MPPT2 Lissage Intervalle"
+    id: mppt2_pw_avg_interval
+    min_value: 1
+    max_value: 30
+    step: 1
+    initial_value: 1
+    restore_value: true
+    optimistic: true
+    entity_category: config
+    unit_of_measurement: s
+    mode: box
+    icon: "mdi:timer-outline"
+
+sensor:
+  # Courant shunt : 75 mV = 100 A -> 1 V (sortie native de l'ads1115) =
+  # 1333.33 A. Gain ±0.512V : large marge au-dessus du point 75mV/100A
+  # (jusqu'à ~680A équivalent) tout en gardant ~20mA de résolution.
+  - platform: ads1115
+    ads1115_id: ads1115_hub
+    multiplexer: 'A0_A1'
+    gain: 0.512
+    name: "MPPT2 Courant"
+    id: mppt2_current
+    device_class: current
+    unit_of_measurement: A
+    icon: "mdi:current-dc"
+    accuracy_decimals: 2
+    update_interval: 1s
+    filters:
+      - multiply: 1333.333333
+
+  # Puissance instantanée = tension batterie partagée (jbd_voltage) x courant
+  # shunt. Non clampée : un courant légèrement négatif au repos (bruit ADC)
+  # doit rester visible plutôt que d'être masqué.
+  - platform: template
+    name: "MPPT2 Puissance"
+    id: mppt2_power
+    unit_of_measurement: W
+    device_class: power
+    accuracy_decimals: 0
+    update_interval: 1s
+    lambda: |-
+      float v = id(jbd_voltage).state;
+      float i = id(mppt2_current).state;
+      if (isnan(v) || isnan(i)) return {};
+      return v * i;
+
+  # Version clampée >= 0, usage interne uniquement : source de l'intégration
+  # d'énergie (un MPPT ne "consomme" pas, un courant négatif n'est que du
+  # bruit de mesure et fausserait le cumul s'il était intégré tel quel).
+  - platform: template
+    name: "MPPT2 Puissance (positive)"
+    id: mppt2_power_clamped
+    internal: true
+    unit_of_measurement: W
+    update_interval: 1s
+    lambda: |-
+      float p = id(mppt2_power).state;
+      if (isnan(p)) return 0;
+      return p < 0 ? 0 : p;
+
+  # Puissance lissée sur table circulaire (voir "Batterie Puissance moyenne"
+  # dans energy.yaml pour le détail de l'algorithme - fenêtre et intervalle
+  # réglables à chaud via les numbers ci-dessus, indépendants de ceux de la
+  # batterie car la dynamique solaire diffère de la dynamique batterie).
+  - platform: template
+    name: "MPPT2 Puissance moyenne"
+    id: mppt2_power_avg
+    unit_of_measurement: W
+    device_class: power
+    accuracy_decimals: 1
+    update_interval: 1s
+    lambda: |-
+      float v = id(mppt2_power).state;
+      if (isnan(v)) return {};
+      uint32_t now = millis();
+      uint32_t interval_ms = (uint32_t) id(mppt2_pw_avg_interval).state * 1000;
+      if (interval_ms < 1000) interval_ms = 1000;
+      if (id(mppt2_pw_avg_count) > 0 && (now - id(mppt2_pw_avg_last_ms)) < interval_ms)
+        return {};
+      id(mppt2_pw_avg_last_ms) = now;
+      id(mppt2_pw_avg_buffer)[id(mppt2_pw_avg_idx)] = v;
+      id(mppt2_pw_avg_idx) = (id(mppt2_pw_avg_idx) + 1) % 100;
+      if (id(mppt2_pw_avg_count) < 100)
+        id(mppt2_pw_avg_count) += 1;
+      int window = (int) id(mppt2_pw_avg_window).state;
+      if (window < 1) window = 1;
+      if (window > 100) window = 100;
+      int n = id(mppt2_pw_avg_count) < window ? id(mppt2_pw_avg_count) : window;
+      float sum = 0;
+      int pos = id(mppt2_pw_avg_idx);
+      for (int i = 0; i < n; i++) {
+        pos = (pos + 99) % 100;
+        sum += id(mppt2_pw_avg_buffer)[pos];
+      }
+      return sum / n;
+
+  # Accumulation brute depuis le dernier boot (repart toujours de 0 - PAS de
+  # restore: ici, l'offset ci-dessous porte seul l'historique pour éviter un
+  # double comptage entre les deux mécanismes).
+  - platform: integration
+    name: "MPPT2 Énergie (session)"
+    id: mppt2_energy_raw
+    sensor: mppt2_power_clamped
+    time_unit: h
+    internal: true
+    accuracy_decimals: 5
+    filters:
+      - multiply: 0.001  # Wh -> kWh
+
+  # Import one-shot du helper HA (2e source de mémoire, réseau). Fusion par
+  # max() avec l'offset déjà restauré de la NVS au boot : ne peut que relever
+  # le total, jamais le faire reculer (voir esphome-jk-bms_mod, même pattern).
+  - platform: homeassistant
+    id: ha_mppt2_energy
+    entity_id: input_number.hem_esphome_mppt2_energy_total
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            if (id(mppt2_energy_restored)) return;
+            if (!std::isfinite(x) || x < 0) return;
+            id(mppt2_energy_offset) = std::max(id(mppt2_energy_offset), x);
+            id(mppt2_energy_restored) = true;
+
+  # Compteur publié = offset restauré (NVS/HA) + accumulé C++ depuis le boot.
+  - platform: template
+    name: "MPPT2 Énergie totale"
+    id: mppt2_energy_total
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    update_interval: 10s
+    lambda: |-
+      float raw = id(mppt2_energy_raw).state;
+      if (isnan(raw)) raw = 0;
+      float total = id(mppt2_energy_offset) + raw;
+      return total < 0 ? 0 : total;
+
+# Remise à zéro : l'offset devient l'opposé de l'accumulé C++ courant (retombe
+# à 0 sans redémarrer) et le helper HA est immédiatement remis à 0 pour que
+# l'ancienne valeur ne revienne pas au prochain boot.
+button:
+  - platform: template
+    name: "MPPT2 Réinitialiser énergie"
+    entity_category: config
+    icon: "mdi:counter"
+    on_press:
+      - lambda: |-
+          float raw = id(mppt2_energy_raw).state;
+          id(mppt2_energy_offset) = isnan(raw) ? 0 : -raw;
+          id(mppt2_energy_restored) = true;
+          id(nvs_mppt2_energy) = 0;
+          global_preferences->sync();
+          id(mppt2_energy_total).update();
+      - homeassistant.action:
+          action: input_number.set_value
+          data:
+            entity_id: input_number.hem_esphome_mppt2_energy_total
+            value: "0"
+
+# Toutes les 30s : (1) copie du total dans la NVS locale (écriture flash
+# réelle limitée par preferences.flash_write_interval, voir system.yaml) ;
+# (2) miroir vers le helper HA, gardé par le flag "restored" pour ne jamais
+# écraser la mémoire réseau avec un compteur reparti de zéro avant restauration.
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          float v = id(mppt2_energy_total).state;
+          if (std::isfinite(v)) id(nvs_mppt2_energy) = v;
+      - if:
+          condition:
+            lambda: 'return id(mppt2_energy_restored);'
+          then:
+            - homeassistant.action:
+                action: input_number.set_value
+                data:
+                  entity_id: input_number.hem_esphome_mppt2_energy_total
+                  value: !lambda |-
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%.3f", id(mppt2_energy_total).state);
+                    return std::string(buf);

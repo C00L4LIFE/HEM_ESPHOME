@@ -45,8 +45,13 @@ esphome:
   on_boot:
     priority: -100
     then:
-      # Restaurer l'heure depuis le DS3231 en attendant la synchro NTP
-      - ds1307.read_time:
+      # RTC DS3231 désactivé temporairement (voir packages/system.yaml) :
+      # plus de restauration d'heure hors-ligne, NTP seul.
+      # Restaurer l'offset du compteur d'énergie MPPT2 depuis la NVS (2e
+      # source de mémoire, voir packages/mppt2_shunt.yaml et le pattern
+      # équivalent dans esphome-jk-bms_mod, commits ed978a0/c239f20).
+      - lambda: |-
+          id(mppt2_energy_offset) = id(nvs_mppt2_energy);
 
 esp32:
   board: esp32dev
@@ -86,6 +91,7 @@ packages:
       - packages/jbd_bms_ble.yaml
       - packages/battery_protection.yaml
       - packages/energy.yaml
+      - packages/mppt2_shunt.yaml
 
 logger:
   level: INFO
