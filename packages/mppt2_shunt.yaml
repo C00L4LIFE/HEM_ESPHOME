@@ -112,6 +112,7 @@ sensor:
     id: mppt2_power
     unit_of_measurement: W
     device_class: power
+    state_class: measurement
     accuracy_decimals: 0
     update_interval: 1s
     lambda: |-
@@ -122,17 +123,16 @@ sensor:
 
   # Version clampée >= 0 (0 dès que le courant n'est pas positif, donc aussi
   # pendant l'autoconsommation nocturne). Sert de source à l'intégration
-  # d'énergie ci-dessous, ET exposée publiquement (pas internal:) car le
-  # tableau de bord Énergie de Home Assistant ("Configurer les panneaux
-  # solaires") exige une puissance solaire toujours >= 0 quand on la fait
-  # intégrer automatiquement (Riemann) faute de capteur d'énergie natif -
-  # "MPPT2 Puissance" (signée) est rejetée par cet assistant pour cette
-  # raison, "MPPT2 Puissance (production)" doit être choisie à la place.
+  # d'énergie ci-dessous, ET exposée publiquement (pas internal:) : c'est le
+  # capteur à choisir dans le champ optionnel "Puissance de production
+  # solaire" du tableau de bord Énergie de HA - "MPPT2 Puissance" (signée)
+  # n'a pas de sens pour un suivi de production solaire.
   - platform: template
     name: "MPPT2 Puissance (production)"
     id: mppt2_power_clamped
     unit_of_measurement: W
     device_class: power
+    state_class: measurement
     accuracy_decimals: 0
     update_interval: 1s
     lambda: |-
@@ -150,6 +150,7 @@ sensor:
     id: mppt2_power_avg
     unit_of_measurement: W
     device_class: power
+    state_class: measurement
     accuracy_decimals: 1
     update_interval: 1s
     lambda: |-
