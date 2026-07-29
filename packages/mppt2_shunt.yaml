@@ -84,12 +84,21 @@ number:
 
 sensor:
   # Courant shunt : 75 mV = 100 A -> 1 V (sortie native de l'ads1115) =
-  # 1333.33 A. Gain ±0.512V : large marge au-dessus du point 75mV/100A
-  # (jusqu'à ~680A équivalent) tout en gardant ~20mA de résolution.
+  # 1333.33 A. Gain ±0.256V (au lieu de ±0.512V) : le bruit de l'ads1115 est
+  # ~constant en nombre de LSB quel que soit le gain (specs TI), donc resserrer
+  # la plage réduit le bruit en valeur absolue de moitié (~10mA/LSB au lieu de
+  # ~20mA) tout en gardant une marge large au-dessus de 100A (jusqu'à ~340A
+  # équivalent).
+  # Lissage + zone morte : 1-3 LSB de bruit ADC pur au repos (courant réel
+  # nul) se traduisaient par -0.02 à -0.06A affichés au lieu de 0.00, et se
+  # propageaient dans "MPPT2 Puissance" (= tension x courant). La moyenne
+  # glissante réduit le bruit ; la zone morte force un vrai zéro sous 0.05A
+  # (indiscernable du bruit avec ce matériel de toute façon), ce qui évite
+  # aussi toute dérive de l'énergie cumulée par une lecture bruitée positive.
   - platform: ads1115
     ads1115_id: ads1115_hub
     multiplexer: 'A0_A1'
-    gain: 0.512
+    gain: 0.256
     name: "MPPT2 Courant"
     id: mppt2_current
     device_class: current
@@ -99,6 +108,10 @@ sensor:
     update_interval: 1s
     filters:
       - multiply: 1333.333333
+      - sliding_window_moving_average:
+          window_size: 4
+          send_every: 1
+      - lambda: 'return fabs(x) < 0.05 ? 0.0 : x;'
 
   # Puissance instantanée = tension batterie partagée (jbd_voltage) x courant
   # shunt. Non clampée : un courant légèrement négatif au repos (bruit ADC)
