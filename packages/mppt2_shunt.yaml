@@ -103,10 +103,30 @@ sensor:
     update_interval: 1s
     filters:
       - multiply: 1333.333333
+    # Puissance (signée) et puissance clampée calculées ICI, dans le même
+    # évènement que la publication du courant - PAS via deux sensor:
+    # template séparés avec leur propre update_interval: chacun aurait son
+    # propre minuteur 1s indépendant, non synchronisé avec celui-ci, et
+    # pouvait donc lire un id(mppt2_power).state calculé au tick PRÉCÉDENT
+    # (signe différent) pendant que id(mppt2_current).state venait déjà de
+    # changer - observé en direct : courant passé à +0.42A pendant que
+    # "MPPT2 Puissance (production)" publiait encore -1W. En calculant les
+    # deux valeurs dans le même appel à partir du même "x" (le courant qui
+    # vient d'être publié), il n'y a plus de fenêtre de désynchronisation
+    # possible.
+    on_value:
+      then:
+        - lambda: |-
+            float v = id(jbd_voltage).state;
+            if (isnan(v)) return;
+            float p = v * x;
+            id(mppt2_power).publish_state(p);
+            id(mppt2_power_clamped).publish_state(x > 0 ? p : 0.0f);
 
   # Puissance instantanée = tension batterie partagée (jbd_voltage) x courant
   # shunt. Non clampée : un courant légèrement négatif au repos (bruit ADC)
-  # doit rester visible plutôt que d'être masqué.
+  # doit rester visible plutôt que d'être masqué. Publiée uniquement via
+  # on_value de "MPPT2 Courant" ci-dessus (pas de lambda/update_interval ici).
   - platform: template
     name: "MPPT2 Puissance"
     id: mppt2_power
@@ -114,19 +134,14 @@ sensor:
     device_class: power
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: 1s
-    lambda: |-
-      float v = id(jbd_voltage).state;
-      float i = id(mppt2_current).state;
-      if (isnan(v) || isnan(i)) return {};
-      return v * i;
 
   # Version clampée >= 0 (0 dès que le courant n'est pas positif, donc aussi
   # pendant l'autoconsommation nocturne). Sert de source à l'intégration
   # d'énergie ci-dessous, ET exposée publiquement (pas internal:) : c'est le
   # capteur à choisir dans le champ optionnel "Puissance de production
   # solaire" du tableau de bord Énergie de HA - "MPPT2 Puissance" (signée)
-  # n'a pas de sens pour un suivi de production solaire.
+  # n'a pas de sens pour un suivi de production solaire. Publiée
+  # uniquement via on_value de "MPPT2 Courant" ci-dessus.
   - platform: template
     name: "MPPT2 Puissance (production)"
     id: mppt2_power_clamped
@@ -134,12 +149,6 @@ sensor:
     device_class: power
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: 1s
-    lambda: |-
-      float p = id(mppt2_power).state;
-      float i = id(mppt2_current).state;
-      if (isnan(p) || isnan(i)) return 0;
-      return i > 0 ? p : 0;
 
   # Puissance lissée sur table circulaire (voir "Batterie Puissance moyenne"
   # dans energy.yaml pour le détail de l'algorithme - fenêtre et intervalle
