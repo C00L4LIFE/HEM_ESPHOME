@@ -1,8 +1,12 @@
 # =============================================================================
 # PZEM-004T v3 (Modbus RTU) - pzem_manager.cpp
-# 2 modules sur le même bus UART :
-#   adresse 0x01 = Consommation AC (charge maison)
-#   adresse 0x02 = Réseau secteur (EDF/Grid)
+# Modules prévus sur le même bus UART :
+#   adresse 0x01 = Consommation AC (charge maison)   -> actif
+#   adresse 0x02 = Réseau secteur (EDF/Grid)         -> DÉBRANCHÉ, désactivé
+# Le module d'adresse 2 n'est physiquement plus connecté (tous ses capteurs
+# restaient à "NA" / unavailable dans HA et le composant interrogeait le bus
+# pour rien toutes les 2 s). Son bloc est conservé en commentaire ci-dessous :
+# le rebrancher = décommenter, rien d'autre à changer.
 # =============================================================================
 
 uart:
@@ -49,27 +53,28 @@ sensor:
     power_factor:
       name: "Conso AC Facteur de puissance"
 
-  # --- PZEM 2 : Réseau secteur (EDF/Grid) ---
-  - platform: pzemac
-    modbus_id: modbus_pzem
-    address: 2
-    update_interval: 2s
-    voltage:
-      name: "Secteur Tension"
-      id: pzem_grid_voltage
-    current:
-      name: "Secteur Courant"
-      id: pzem_grid_current
-    power:
-      name: "Secteur Puissance"
-      id: pzem_grid_power
-    energy:
-      name: "Secteur Énergie"
-      id: pzem_grid_energy
-      filters:
-        - multiply: 0.001  # Wh -> kWh
-      unit_of_measurement: kWh
-    frequency:
-      name: "Secteur Fréquence"
-    power_factor:
-      name: "Secteur Facteur de puissance"
+  # --- PZEM 2 : Réseau secteur (EDF/Grid) — DÉBRANCHÉ, à décommenter au
+  #     rebranchement du module (adresse Modbus 2 sur le même bus) ---
+  # - platform: pzemac
+  #   modbus_id: modbus_pzem
+  #   address: 2
+  #   update_interval: 2s
+  #   voltage:
+  #     name: "Secteur Tension"
+  #     id: pzem_grid_voltage
+  #   current:
+  #     name: "Secteur Courant"
+  #     id: pzem_grid_current
+  #   power:
+  #     name: "Secteur Puissance"
+  #     id: pzem_grid_power
+  #   energy:
+  #     name: "Secteur Énergie"
+  #     id: pzem_grid_energy
+  #     filters:
+  #       - multiply: 0.001  # Wh -> kWh
+  #     unit_of_measurement: kWh
+  #   frequency:
+  #     name: "Secteur Fréquence"
+  #   power_factor:
+  #     name: "Secteur Facteur de puissance"

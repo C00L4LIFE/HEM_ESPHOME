@@ -14,7 +14,7 @@ configuration YAML avec intégration Home Assistant native.
 | Périphérique | Bus | Pins ESP32 |
 |---|---|---|
 | MPPT eSmart3 | RS485 (9600 8N1) | RX 16 / TX 17 / DE 4 |
-| 2× PZEM-004T v3 | Modbus RTU (9600) | RX 13 / TX 14 — adr. 1 (conso AC), adr. 2 (secteur) |
+| PZEM-004T v3 | Modbus RTU (9600) | RX 13 / TX 14 — adr. 1 (conso AC). Adr. 2 (secteur) débranchée, bloc commenté dans `packages/pzem.yaml` |
 | JBD BMS (Xiaoxiang) | BLE | MAC dans `secrets.yaml` |
 | RTC DS3231 | I2C | SDA 21 / SCL 22 |
 | 4 relais (actifs bas) | GPIO | 25, 26, 27, 32 |
@@ -35,11 +35,11 @@ déclarées dans `packages/jbd_bms_ble.yaml` (au-delà, l'entité reste toujours
 home_energy_management.yaml   Fichier principal (pins, board, packages)
 secrets.yaml                  Identifiants WiFi/MQTT, MAC JBD (non commité)
 packages/
-  wifi.yaml                   STA + AP secours + portail captif
+  wifi.yaml                   STA + AP secours + portail captif + capteurs réseau
   mqtt.yaml                   API native Home Assistant (MQTT en option)
   system.yaml                 OTA, web server, NTP + DS3231, watchdog MPPT
   gpio.yaml                   4 relais + 4 entrées
-  pzem.yaml                   2× PZEM-004T v3 (pzemac natif)
+  pzem.yaml                   PZEM-004T v3 adr. 1 (adr. 2 commentée, débranchée)
   mppt_esmart3.yaml           MPPT eSmart3 (composant custom)
   jbd_bms_ble.yaml            JBD BMS BLE (syssi/esphome-jbd-bms)
   battery_protection.yaml     Protection batterie automatique
@@ -112,6 +112,35 @@ Tous les seuils sont réglables depuis Home Assistant / le web server via les
 entités `number` (persistées en NVS, comme l'espace `bat_protect` d'origine).
 Interrupteur global **Protection batterie active**.
 
+## Réseau : nom DNS `.internal` et capteurs réseau
+
+Le routeur du réseau (OPNsense) sert les noms d'hôtes locaux dans le domaine
+**`.internal`**, `.local` restant réservé au mDNS/Bonjour. `packages/wifi.yaml`
+fixe donc `wifi: domain: .internal` : les outils ESPHome (OTA, `esphome logs`,
+détection « en ligne » du dashboard/add-on) visent **`hem-esphome.internal`**
+au lieu de `hem-esphome.local`.
+
+Le composant `mdns:` reste actif (défaut) : `hem-esphome.local` continue de
+répondre pour qui est sur le même sous-réseau, tandis que `.internal` traverse
+les VLAN via le DNS du routeur.
+
+Prérequis côté routeur, sinon le nom ne résout pas (l'OTA par IP reste
+toujours possible : `esphome run ... --device 10.x.x.x`) :
+
+- bail DHCP statique pour le device, **et**
+- enregistrement du nom dans le résolveur (Unbound : *host override*
+  `hem-esphome` / domaine `internal`, ou enregistrement automatique des baux
+  DHCP si le serveur DHCP le permet).
+
+Pour changer de domaine, surcharger la substitution `dns_domain` (définie dans
+`packages/wifi.yaml`) depuis `home_energy_management.yaml`.
+
+Capteurs réseau exposés (tous en `diagnostic`, définis dans
+`packages/wifi.yaml`) : **WiFi RSSI** (dBm), **WiFi Qualité** (%), **État
+réseau** (connectivité), **Adresse IP**, **Adresse MAC**, **SSID WiFi**,
+**BSSID WiFi**, **Serveur DNS**, **Nom d'hôte** (nom pleinement qualifié tel
+que les outils doivent l'utiliser, `hem-esphome.internal`).
+
 ## Installation
 
 `packages:` et `external_components:` pointent tous les trois directement
@@ -171,11 +200,20 @@ home_energy_management.yaml && esphome run home_energy_management.yaml`.
 ### Développer en local (modifier ce dépôt)
 
 Pour tester une modification de `packages/*.yaml` ou de `components/esmart3`
-**avant** de la pousser sur GitHub, cloner le dépôt et remplacer
-temporairement, dans `home_energy_management.yaml`, le bloc `packages:` par
-des `!include packages/xxx.yaml` locaux et la source `esmart3` par
-`type: local, path: components` — sinon la config continue de compiler la
-dernière version publiée sur `main`, pas vos fichiers locaux non poussés.
+**avant** de la pousser sur GitHub, cloner le dépôt et utiliser
+[`local-test.yaml`](local-test.yaml) : c'est la copie de
+`home_energy_management.yaml` où `packages:` utilise des `!include` locaux et
+la source `esmart3` est en `type: local` — sinon la config continue de
+compiler la dernière version publiée sur `main`, pas vos fichiers locaux non
+poussés.
+
+```bash
+python -m esphome config local-test.yaml            # validation
+python -m esphome run local-test.yaml --device 10.77.77.128   # OTA par IP
+```
+
+`local-test.yaml` duplique la partie board/pins du fichier principal : penser
+à répercuter un changement de pins ou de board dans les deux.
 
 ## Réutiliser le composant `esmart3` dans un autre projet
 

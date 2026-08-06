@@ -1,6 +1,7 @@
 # =============================================================================
 # Système : OTA, serveur web, temps (NTP + DS3231), LED de statut,
-# capteurs système (RSSI, heap, uptime, IP/MAC), watchdog MPPT
+# capteurs système (heap, uptime, température, version), watchdog MPPT
+# (les capteurs réseau vivent dans packages/wifi.yaml)
 # =============================================================================
 
 ota:
@@ -54,10 +55,8 @@ debug:
   update_interval: 30s
 
 sensor:
-  - platform: wifi_signal
-    name: "WiFi RSSI"
-    id: wifi_rssi
-    update_interval: 30s
+  # Capteurs réseau (RSSI, qualité, IP/MAC/SSID/BSSID/DNS, nom d'hôte) :
+  # voir packages/wifi.yaml.
   - platform: uptime
     name: "Uptime"
     id: uptime_sensor
@@ -71,13 +70,6 @@ sensor:
     name: "Température ESP32"
 
 text_sensor:
-  - platform: wifi_info
-    ip_address:
-      name: "Adresse IP"
-    mac_address:
-      name: "Adresse MAC"
-    ssid:
-      name: "SSID WiFi"
   - platform: version
     name: "Version ESPHome"
 

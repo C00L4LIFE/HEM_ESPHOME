@@ -38,10 +38,11 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   # Pas de name_add_mac_suffix : le Device Builder (add-on HA) détecte l'état
-  # en ligne en résolvant "<name>.local" en mDNS, sans connaître le suffixe
-  # MAC - avec le suffixe, le device apparaissait "Hors ligne" et l'OTA
-  # depuis l'add-on échouait, alors que tout fonctionnait par IP. Un seul
-  # device HEM existe, l'unicité du nom (hem-XXXX d'origine) est inutile ici.
+  # en ligne en résolvant "<name><domain>" (aujourd'hui hem-esphome.internal,
+  # voir packages/wifi.yaml), sans connaître le suffixe MAC - avec le suffixe,
+  # le device apparaissait "Hors ligne" et l'OTA depuis l'add-on échouait,
+  # alors que tout fonctionnait par IP. Un seul device HEM existe, l'unicité
+  # du nom (hem-XXXX d'origine) est inutile ici.
   on_boot:
     priority: -100
     then:

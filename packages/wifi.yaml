@@ -1,8 +1,15 @@
 # =============================================================================
-# WiFi : station + AP de secours + portail captif
+# WiFi : station + AP de secours + portail captif + capteurs réseau
 # Reproduit wifi_manager.cpp : SSID principal + backup, AP HEM_XXXX,
 # reboot après 5 min sans WiFi (WATCHDOG_WIFI_TIMEOUT)
 # =============================================================================
+
+substitutions:
+  # Domaine DNS local du réseau (routeur OPNsense) : les noms d'hôtes locaux
+  # sont servis par Unbound en ".internal", plus en ".local" (qui reste réservé
+  # au mDNS/Bonjour). Utilisé par `wifi: domain:` ci-dessous et par le capteur
+  # "Nom d'hôte". Peut être surchargé depuis le fichier principal.
+  dns_domain: ".internal"
 
 wifi:
   networks:
@@ -11,6 +18,15 @@ wifi:
     # WiFi de backup (optionnel, décommenter si besoin)
     # - ssid: !secret wifi_ssid2
     #   password: !secret wifi_password2
+  # Suffixe DNS utilisé par les outils ESPHome (OTA, logs, détection en ligne
+  # du dashboard) : ils viseront "hem-esphome.internal" au lieu de
+  # "hem-esphome.local". Le mDNS reste actif en parallèle (composant mdns:,
+  # activé par défaut) : ".local" continue de répondre sur le même sous-réseau,
+  # ".internal" traverse les VLAN via le DNS d'OPNsense.
+  # Prérequis côté routeur : le bail DHCP de ce device doit être enregistré
+  # dans Unbound (bail statique + host override "hem-esphome" / domaine
+  # "internal", ou enregistrement automatique des baux DHCP).
+  domain: ${dns_domain}
   # Équivalent WATCHDOG_WIFI_TIMEOUT (5 min sans WiFi -> reboot)
   reboot_timeout: 5min
   # Mode AP de secours (équivalent HEM_XXXX / 12345678)
@@ -20,3 +36,57 @@ wifi:
     ap_timeout: 30s
 
 captive_portal:
+
+# --- Capteurs réseau (diagnostic) ---------------------------------------
+# Regroupés ici plutôt que dans system.yaml pour que tout ce qui touche au
+# réseau (adressage, nom d'hôte, qualité du lien) vive au même endroit.
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    id: wifi_rssi
+    update_interval: 30s
+    entity_category: diagnostic
+  # Même mesure en pourcentage (échelle usuelle : -100 dBm = 0 %, -50 dBm = 100 %)
+  - platform: copy
+    source_id: wifi_rssi
+    name: "WiFi Qualité"
+    unit_of_measurement: "%"
+    device_class: ""
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+
+binary_sensor:
+  # Connectivité vue depuis Home Assistant (device_class: connectivity)
+  - platform: status
+    name: "État réseau"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "Adresse IP"
+      entity_category: diagnostic
+    mac_address:
+      name: "Adresse MAC"
+      entity_category: diagnostic
+    ssid:
+      name: "SSID WiFi"
+      entity_category: diagnostic
+    bssid:
+      name: "BSSID WiFi"
+      entity_category: diagnostic
+    dns_address:
+      name: "Serveur DNS"
+      entity_category: diagnostic
+
+  # Nom pleinement qualifié tel que les outils ESPHome/HA doivent l'utiliser.
+  # Sert de contrôle visuel après la bascule .local -> .internal.
+  - platform: template
+    name: "Nom d'hôte"
+    entity_category: diagnostic
+    icon: "mdi:dns"
+    update_interval: 60s
+    lambda: |-
+      return {std::string(App.get_name()) + "${dns_domain}"};
