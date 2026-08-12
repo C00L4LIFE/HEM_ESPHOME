@@ -32,6 +32,17 @@ sensor:
     update_interval: 1s
     filters:
       - multiply: 1333.333333
+      # TEMPORAIRE - lissage max en attendant de vérifier le câblage A2/A3 :
+      # ce canal oscille brutalement (-0.5A à -28A d'une seconde à l'autre)
+      # pendant que MPPT2 (A0-A1, même puce ADS1115) reste parfaitement
+      # stable - ça pointe vers un faux contact ou du bruit EM capté par les
+      # fils du shunt, pas un problème de partage de l'ADC. Fenêtre de 60
+      # échantillons (~60s à 1 sample/s) pour absorber les pics le temps de
+      # vérifier les connexions physiquement. À retirer ou réduire une fois
+      # le câblage confirmé propre.
+      - sliding_window_moving_average:
+          window_size: 60
+          send_every: 1
     # Puissance + puissances clampées (charge/décharge) calculées ensemble
     # ici, dans le même évènement que la publication du courant - même
     # raison que pour MPPT2 (packages/mppt2_shunt.yaml) : des sensor:
