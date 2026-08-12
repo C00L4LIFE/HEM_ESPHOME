@@ -90,10 +90,8 @@ sensor:
     restore: true
     device_class: energy
     state_class: total_increasing
-    unit_of_measurement: kWh
-    accuracy_decimals: 3
-    filters:
-      - multiply: 0.001
+    unit_of_measurement: Wh
+    accuracy_decimals: 0
   - platform: integration
     name: "Onduleur Énergie consommée"
     id: onduleur_energy_discharged
@@ -102,7 +100,5 @@ sensor:
     restore: true
     device_class: energy
     state_class: total_increasing
-    unit_of_measurement: kWh
-    accuracy_decimals: 3
-    filters:
-      - multiply: 0.001
+    unit_of_measurement: Wh
+    accuracy_decimals: 0

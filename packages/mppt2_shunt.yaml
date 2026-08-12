@@ -14,7 +14,7 @@
 # d'énergie restent bloqués à 0 après chaque reboot) :
 #   1. Créer un helper "input_number.hem_esphome_mppt2_energy_total"
 #      (Paramètres > Appareils et services > Assistants > Nombre), plage
-#      0 à 999999, pas 0.001 - les valeurs manipulées sont en kWh.
+#      0 à 999999, pas 0.1 - les valeurs manipulées sont en Wh.
 #   2. Paramètres > Appareils > ESPHome > home-energy-management > Configurer
 #      > activer "Allow the device to perform Home Assistant actions"
 #      (nécessaire pour homeassistant.action / input_number.set_value).
@@ -41,7 +41,7 @@ globals:
   - id: mppt2_pw_avg_last_ms
     type: uint32_t
     initial_value: '0'
-  # Compteur d'énergie MPPT2 (kWh) : offset = historique restauré (NVS au
+  # Compteur d'énergie MPPT2 (Wh) : offset = historique restauré (NVS au
   # boot, puis relevé par le helper HA si plus grand - fusion max, jamais de
   # recul), raw = accumulation C++ depuis le boot, total publié = offset+raw.
   - id: mppt2_energy_offset
@@ -196,9 +196,7 @@ sensor:
     sensor: mppt2_power_clamped
     time_unit: h
     internal: true
-    accuracy_decimals: 5
-    filters:
-      - multiply: 0.001  # Wh -> kWh
+    accuracy_decimals: 2
 
   # Import one-shot du helper HA (2e source de mémoire, réseau). Fusion par
   # max() avec l'offset déjà restauré de la NVS au boot : ne peut que relever
@@ -219,10 +217,10 @@ sensor:
   - platform: template
     name: "MPPT2 Énergie totale"
     id: mppt2_energy_total
-    unit_of_measurement: kWh
+    unit_of_measurement: Wh
     device_class: energy
     state_class: total_increasing
-    accuracy_decimals: 3
+    accuracy_decimals: 0
     update_interval: 10s
     lambda: |-
       float raw = id(mppt2_energy_raw).state;
@@ -272,5 +270,5 @@ interval:
                   entity_id: input_number.hem_esphome_mppt2_energy_total
                   value: !lambda |-
                     char buf[32];
-                    snprintf(buf, sizeof(buf), "%.3f", id(mppt2_energy_total).state);
+                    snprintf(buf, sizeof(buf), "%.1f", id(mppt2_energy_total).state);
                     return std::string(buf);

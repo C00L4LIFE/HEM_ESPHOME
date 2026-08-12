@@ -5,9 +5,9 @@
 #     réglables depuis Home Assistant - numbers "Batterie Lissage ...")
 #   - énergie restante / nominale batterie (Wh)
 #   - temps restant estimé (min ; négatif = temps de charge)
-#   - énergie batterie chargée/déchargée cumulée (kWh, tableau de bord
+#   - énergie batterie chargée/déchargée cumulée (Wh, tableau de bord
 #     Énergie de Home Assistant) : le composant jbd_bms_ble ne fournit que
-#     des puissances instantanées, pas de compteur kWh natif ; on intègre
+#     des puissances instantanées, pas de compteur Wh natif ; on intègre
 #     charging_power/discharging_power dans le temps (platform: integration).
 # =============================================================================
 
@@ -118,7 +118,7 @@ sensor:
       // (et l'intégration en énergie cumulée ci-dessous exige une source >= 0).
       return p < 0 ? 0 : p;
 
-  # Énergie maison cumulée (kWh), équivalent house_energy de ha_manager.cpp.
+  # Énergie maison cumulée (Wh), équivalent house_energy de ha_manager.cpp.
   - platform: integration
     name: "Maison Énergie"
     id: house_energy
@@ -127,10 +127,8 @@ sensor:
     restore: true
     device_class: energy
     state_class: total_increasing
-    unit_of_measurement: kWh
-    accuracy_decimals: 3
-    filters:
-      - multiply: 0.001
+    unit_of_measurement: Wh
+    accuracy_decimals: 0
 
   # Énergie restante batterie en Wh (capacité restante Ah x tension)
   - platform: template
@@ -161,9 +159,9 @@ sensor:
       if (isnan(ah) || isnan(v)) return {};
       return ah * v;
 
-  # Énergie batterie chargée/déchargée cumulée (kWh) - compatible tableau de
+  # Énergie batterie chargée/déchargée cumulée (Wh) - compatible tableau de
   # bord Énergie de Home Assistant. Intégration temporelle de la puissance
-  # (W) en Wh (time_unit: h) puis conversion en kWh (filtre multiply).
+  # (W) sur le temps (time_unit: h) donne directement des Wh.
   # restore: true pour ne pas repartir de zéro à chaque redémarrage.
   - platform: integration
     name: "Batterie Énergie chargée"
@@ -173,10 +171,8 @@ sensor:
     restore: true
     device_class: energy
     state_class: total_increasing
-    unit_of_measurement: kWh
-    accuracy_decimals: 3
-    filters:
-      - multiply: 0.001
+    unit_of_measurement: Wh
+    accuracy_decimals: 0
   - platform: integration
     name: "Batterie Énergie déchargée"
     id: battery_energy_discharged
@@ -185,10 +181,8 @@ sensor:
     restore: true
     device_class: energy
     state_class: total_increasing
-    unit_of_measurement: kWh
-    accuracy_decimals: 3
-    filters:
-      - multiply: 0.001
+    unit_of_measurement: Wh
+    accuracy_decimals: 0
 
   # Temps restant estimé (minutes) - formule du main.cpp :
   #   décharge : réserve de 20 Ah conservée si capacité > 20 Ah

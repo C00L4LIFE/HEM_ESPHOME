@@ -45,9 +45,7 @@ sensor:
     energy:
       name: "Conso AC Énergie"
       id: pzem_ac_load_energy
-      filters:
-        - multiply: 0.001  # Wh -> kWh
-      unit_of_measurement: kWh
+      unit_of_measurement: Wh
     frequency:
       name: "Conso AC Fréquence"
     power_factor:
@@ -71,9 +69,7 @@ sensor:
   #   energy:
   #     name: "Secteur Énergie"
   #     id: pzem_grid_energy
-  #     filters:
-  #       - multiply: 0.001  # Wh -> kWh
-  #     unit_of_measurement: kWh
+  #     unit_of_measurement: Wh
   #   frequency:
   #     name: "Secteur Fréquence"
   #   power_factor:
