@@ -12,9 +12,10 @@
 #
 # Convention de signe : courant positif = charge (stockage depuis le grid),
 # négatif = décharge (consommation via l'onduleur) - cohérent avec
-# jbd_current/jbd_power. Le câblage physique du shunt donne le signe
-# opposé : inversé en logiciel ci-dessous (multiply négatif) plutôt que de
-# rebrancher le shunt.
+# jbd_current/jbd_power. Le câblage physique du shunt correspond déjà à
+# cette convention (une inversion logicielle testée le 2026-08-11 s'est
+# avérée fausse - "Onduleur Énergie stockée" s'incrémentait alors que
+# l'onduleur consommait réellement - annulée).
 # =============================================================================
 
 sensor:
@@ -30,7 +31,7 @@ sensor:
     accuracy_decimals: 2
     update_interval: 1s
     filters:
-      - multiply: -1333.333333
+      - multiply: 1333.333333
       # TEMPORAIRE - lissage max en attendant de vérifier le câblage A2/A3 :
       # ce canal oscille brutalement (-0.5A à -28A d'une seconde à l'autre)
       # pendant que MPPT2 (A0-A1, même puce ADS1115) reste parfaitement
