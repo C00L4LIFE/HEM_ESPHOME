@@ -87,12 +87,19 @@ packages:
       - packages/mqtt.yaml
       - packages/system.yaml
       - packages/gpio.yaml
-      - packages/pzem.yaml
+      # PZEM (mesure AC) désactivé temporairement : plus mesuré pour
+      # l'instant, remplacé par le shunt DC "Onduleur" (packages/
+      # inverter_shunt.yaml) installé sur la borne négative de l'onduleur -
+      # libère aussi tout un bus UART (pins 13/14) et élimine les erreurs
+      # modbus récurrentes causées par le PZEM adresse 2 qui ne répondait
+      # pas de façon fiable. Pour réactiver : décommenter la ligne suivante.
+      # - packages/pzem.yaml
       - packages/mppt_esmart3.yaml
       - packages/jbd_bms_ble.yaml
       - packages/battery_protection.yaml
       - packages/energy.yaml
       - packages/mppt2_shunt.yaml
+      - packages/inverter_shunt.yaml
 
 logger:
   level: INFO

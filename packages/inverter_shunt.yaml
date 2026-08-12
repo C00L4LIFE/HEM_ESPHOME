@@ -1,0 +1,98 @@
+# =============================================================================
+# Onduleur - shunt 75mV/100A sur la borne négative de l'onduleur (2e paire
+# différentielle de l'ADS1115 déjà déclaré dans packages/mppt2_shunt.yaml,
+# canaux A2-A3). Remplace le PZEM AC (désactivé, voir home_energy_management.
+# yaml) pour mesurer ce que l'onduleur tire de la batterie (consommation
+# maison) ou y stocke (recharge depuis le grid, quand un chargeur sera
+# ajouté - absent pour l'instant).
+#
+# Tension réutilisée depuis l'eSmart3 (mppt_battery_voltage), PAS jbd_voltage
+# comme pour MPPT2 - demande explicite, contrairement au shunt MPPT2 qui
+# utilise la mesure BMS.
+#
+# Convention de signe (à vérifier en direct - dépend du sens de câblage du
+# shunt, indéterminable sans test matériel) : courant positif = charge
+# (stockage depuis le grid), négatif = décharge (consommation via
+# l'onduleur). Si l'affichage est inversé sur le matériel réel, inverser le
+# câblage du shunt plutôt que le signe en logiciel (garde la cohérence avec
+# la convention déjà utilisée pour jbd_current/jbd_power).
+# =============================================================================
+
+sensor:
+  - platform: ads1115
+    ads1115_id: ads1115_hub
+    multiplexer: 'A2_A3'
+    gain: 0.512
+    name: "Onduleur Courant"
+    id: onduleur_current
+    device_class: current
+    unit_of_measurement: A
+    icon: "mdi:current-dc"
+    accuracy_decimals: 2
+    update_interval: 1s
+    filters:
+      - multiply: 1333.333333
+    # Puissance + puissances clampées (charge/décharge) calculées ensemble
+    # ici, dans le même évènement que la publication du courant - même
+    # raison que pour MPPT2 (packages/mppt2_shunt.yaml) : des sensor:
+    # template séparés avec leur propre update_interval indépendant peuvent
+    # lire un id(...).state calculé au tick précédent pendant que le
+    # courant vient déjà de changer de signe.
+    on_value:
+      then:
+        - lambda: |-
+            float v = id(mppt_battery_voltage).state;
+            if (isnan(v)) return;
+            float p = v * x;
+            id(onduleur_power).publish_state(p);
+            id(onduleur_charging_power).publish_state(x > 0 ? p : 0.0f);
+            id(onduleur_discharging_power).publish_state(x < 0 ? -p : 0.0f);
+
+  # Puissance signée, publiée uniquement via on_value ci-dessus.
+  - platform: template
+    name: "Onduleur Puissance"
+    id: onduleur_power
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Puissances clampées >= 0, usage interne : sources des intégrations
+  # d'énergie ci-dessous. Publiées uniquement via on_value ci-dessus.
+  - platform: template
+    id: onduleur_charging_power
+    internal: true
+    unit_of_measurement: W
+  - platform: template
+    id: onduleur_discharging_power
+    internal: true
+    unit_of_measurement: W
+
+  # Énergie stockée (charge, positive) / consommée (décharge, négative) -
+  # même pattern que "Batterie Énergie chargée/déchargée" dans energy.yaml
+  # (restore: true suffit ici, pas besoin du schéma offset+NVS+helper HA
+  # utilisé pour MPPT2, non demandé pour ce capteur).
+  - platform: integration
+    name: "Onduleur Énergie stockée"
+    id: onduleur_energy_charged
+    sensor: onduleur_charging_power
+    time_unit: h
+    restore: true
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: kWh
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+  - platform: integration
+    name: "Onduleur Énergie consommée"
+    id: onduleur_energy_discharged
+    sensor: onduleur_discharging_power
+    time_unit: h
+    restore: true
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: kWh
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
