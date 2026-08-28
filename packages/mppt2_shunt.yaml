@@ -3,6 +3,9 @@
 # Mesuré uniquement via un shunt 75mV/100A sur ADS1115 (entrée différentielle
 # A0-A1). Partage la même batterie que le MPPT eSmart3 : la tension est donc
 # réutilisée depuis jbd_voltage (mesure directe côté batterie), pas re-mesurée.
+# La tension panneau du MPPT eSmart3 (mppt_pv_voltage) sert de détecteur de
+# soleil : sous la tension batterie, aucune production n'est possible et les
+# capteurs de production / moyenne du MPPT2 sont forcés à 0 (filtrage du bruit).
 #
 # Persistance de l'énergie cumulée : même schéma "offset + NVS + helper HA"
 # validé sur esphome-jk-bms_mod (commits ed978a0, c239f20) plutôt qu'un simple
@@ -114,6 +117,15 @@ sensor:
     # deux valeurs dans le même appel à partir du même "x" (le courant qui
     # vient d'être publié), il n'y a plus de fenêtre de désynchronisation
     # possible.
+    #
+    # Porte "soleil" : le MPPT2 n'a pas de mesure de tension panneau, on
+    # réutilise celle du MPPT eSmart3 (même champ solaire). Tant que
+    # "MPPT PV Tension" reste sous la tension batterie, les panneaux ne
+    # peuvent rien débiter : le courant lu n'est alors que du bruit ADC (ou
+    # l'autoconsommation du contrôleur), donc la puissance de PRODUCTION est
+    # forcée à 0. Si la tension PV est indisponible (NaN, eSmart3 muet), on
+    # ne filtre pas : mieux vaut laisser passer une vraie production que de
+    # l'effacer sur une donnée manquante.
     on_value:
       then:
         - lambda: |-
@@ -121,7 +133,9 @@ sensor:
             if (isnan(v)) return;
             float p = v * x;
             id(mppt2_power).publish_state(p);
-            id(mppt2_power_clamped).publish_state(x > 0 ? p : 0.0f);
+            float pv = id(mppt_pv_voltage).state;
+            bool sun = isnan(pv) || pv > v;
+            id(mppt2_power_clamped).publish_state((sun && x > 0) ? p : 0.0f);
 
   # Puissance instantanée = tension batterie partagée (jbd_voltage) x courant
   # shunt. Non clampée : un courant légèrement négatif au repos (bruit ADC)
@@ -136,11 +150,12 @@ sensor:
     accuracy_decimals: 0
 
   # Version clampée >= 0 (0 dès que le courant n'est pas positif, donc aussi
-  # pendant l'autoconsommation nocturne). Sert de source à l'intégration
-  # d'énergie ci-dessous, ET exposée publiquement (pas internal:) : c'est le
-  # capteur à choisir dans le champ optionnel "Puissance de production
-  # solaire" du tableau de bord Énergie de HA - "MPPT2 Puissance" (signée)
-  # n'a pas de sens pour un suivi de production solaire. Publiée
+  # pendant l'autoconsommation nocturne, et 0 tant que "MPPT PV Tension" reste
+  # sous la tension batterie - voir la porte "soleil" ci-dessus). Sert de
+  # source à l'intégration d'énergie ci-dessous, ET exposée publiquement (pas
+  # internal:) : c'est le capteur à choisir dans le champ optionnel "Puissance
+  # de production solaire" du tableau de bord Énergie de HA - "MPPT2 Puissance"
+  # (signée) n'a pas de sens pour un suivi de production solaire. Publiée
   # uniquement via on_value de "MPPT2 Courant" ci-dessus.
   - platform: template
     name: "MPPT2 Puissance (production)"
@@ -163,6 +178,19 @@ sensor:
     accuracy_decimals: 1
     update_interval: 1s
     lambda: |-
+      // Même porte "soleil" que pour la puissance de production, évaluée
+      // ici directement sur les deux états (pas via un flag partagé) pour ne
+      // dépendre d'aucun ordre entre ce minuteur 1s et celui du courant.
+      // Panneaux sous la tension batterie = rien à moyenner : on publie 0 et
+      // on vide la table circulaire, pour que la moyenne reparte propre au
+      // lever du jour au lieu de traîner les dernières valeurs de la veille.
+      float pv = id(mppt_pv_voltage).state;
+      float vbat = id(jbd_voltage).state;
+      if (!isnan(pv) && !isnan(vbat) && pv <= vbat) {
+        id(mppt2_pw_avg_count) = 0;
+        id(mppt2_pw_avg_idx) = 0;
+        return 0.0f;
+      }
       float v = id(mppt2_power).state;
       if (isnan(v)) return {};
       uint32_t now = millis();
