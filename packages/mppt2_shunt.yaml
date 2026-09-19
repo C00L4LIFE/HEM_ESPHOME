@@ -2,7 +2,10 @@
 # MPPT2 - deuxième contrôleur de charge solaire, sans port de communication.
 # Mesuré uniquement via un shunt 75mV/100A sur ADS1115 (entrée différentielle
 # A0-A1). Partage la même batterie que le MPPT eSmart3 : la tension est donc
-# réutilisée depuis jbd_voltage (mesure directe côté batterie), pas re-mesurée.
+# réutilisée depuis celle lue par l'eSmart3 (mppt_battery_voltage), pas
+# re-mesurée. Auparavant jbd_voltage (BMS JBD en BLE), retiré du système au
+# passage du parc en 48V : sa tension restait NaN et plus aucune puissance
+# MPPT2 n'était calculée.
 # La tension panneau du MPPT eSmart3 (mppt_pv_voltage) sert de détecteur de
 # soleil : sous la tension batterie, aucune production n'est possible et les
 # capteurs de production / moyenne du MPPT2 sont forcés à 0 (filtrage du bruit).
@@ -129,7 +132,7 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            float v = id(jbd_voltage).state;
+            float v = id(mppt_battery_voltage).state;
             if (isnan(v)) return;
             float p = v * x;
             id(mppt2_power).publish_state(p);
@@ -137,10 +140,11 @@ sensor:
             bool sun = isnan(pv) || pv > v;
             id(mppt2_power_clamped).publish_state((sun && x > 0) ? p : 0.0f);
 
-  # Puissance instantanée = tension batterie partagée (jbd_voltage) x courant
-  # shunt. Non clampée : un courant légèrement négatif au repos (bruit ADC)
-  # doit rester visible plutôt que d'être masqué. Publiée uniquement via
-  # on_value de "MPPT2 Courant" ci-dessus (pas de lambda/update_interval ici).
+  # Puissance instantanée = tension batterie partagée (mppt_battery_voltage,
+  # lue par l'eSmart3) x courant shunt. Non clampée : un courant légèrement
+  # négatif au repos (bruit ADC) doit rester visible plutôt que d'être masqué.
+  # Publiée uniquement via on_value de "MPPT2 Courant" ci-dessus (pas de
+  # lambda/update_interval ici).
   - platform: template
     name: "MPPT2 Puissance"
     id: mppt2_power
@@ -185,7 +189,7 @@ sensor:
       // on vide la table circulaire, pour que la moyenne reparte propre au
       // lever du jour au lieu de traîner les dernières valeurs de la veille.
       float pv = id(mppt_pv_voltage).state;
-      float vbat = id(jbd_voltage).state;
+      float vbat = id(mppt_battery_voltage).state;
       if (!isnan(pv) && !isnan(vbat) && pv <= vbat) {
         id(mppt2_pw_avg_count) = 0;
         id(mppt2_pw_avg_idx) = 0;
