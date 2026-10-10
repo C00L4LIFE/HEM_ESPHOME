@@ -7,14 +7,14 @@
 
 switch:
   - platform: gpio
-    name: "Relais 1"
+    name: "Inverter ON/OFF"
     id: relay_1
     pin:
       number: ${relay_1_pin}
       inverted: true
     restore_mode: ALWAYS_ON
   - platform: gpio
-    name: "Relais 2"
+    name: "Solar Sensor ON/OFF"
     id: relay_2
     pin:
       number: ${relay_2_pin}
@@ -38,7 +38,7 @@ switch:
 binary_sensor:
   # GPIO 33 : pull-up interne disponible
   - platform: gpio
-    name: "Entrée 1"
+    name: "Is Inverter ON"
     id: input_1
     pin:
       number: ${input_1_pin}
