@@ -57,6 +57,7 @@ sensor:
       id: jbd_capacity_remaining
     cell_count:
       name: "Batterie Nombre de cellules"
+      id: jbd_cell_count
     software_version:
       name: "Batterie Version logicielle"
       entity_category: diagnostic

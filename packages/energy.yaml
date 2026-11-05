@@ -130,7 +130,9 @@ sensor:
     unit_of_measurement: Wh
     accuracy_decimals: 0
 
-  # Énergie restante batterie en Wh (capacité restante Ah x tension)
+  # Énergie restante batterie en Wh (capacité restante Ah x tension
+  # nominale du pack = nb cellules x 3,2 V LiFePO4) : même base que
+  # l'énergie nominale, pour que restante <= nominale à 100 % de SoC.
   - platform: template
     name: "Batterie Énergie restante"
     id: battery_remaining_wh
@@ -140,12 +142,13 @@ sensor:
     update_interval: 5s
     lambda: |-
       float ah = id(jbd_capacity_remaining).state;
-      float v = id(jbd_voltage).state;
-      if (isnan(ah) || isnan(v)) return {};
-      return ah * v;
+      float cells = id(jbd_cell_count).state;
+      if (isnan(ah) || isnan(cells) || cells <= 0) return {};
+      return ah * cells * 3.2f;
 
-  # Énergie nominale batterie en Wh (capacité nominale Ah x tension),
-  # équivalent battery_nominal_energy de ha_manager.cpp
+  # Énergie nominale batterie en Wh = nb cellules x capacité nominale (Ah)
+  # x 3,2 V (tension nominale LiFePO4), indépendante de la tension mesurée.
+  # Ex. 16s 280 Ah -> 16 x 280 x 3,2 = 14 336 Wh.
   - platform: template
     name: "Batterie Énergie nominale"
     id: battery_nominal_energy_wh
@@ -155,9 +158,9 @@ sensor:
     update_interval: 5s
     lambda: |-
       float ah = id(jbd_nominal_capacity).state;
-      float v = id(jbd_voltage).state;
-      if (isnan(ah) || isnan(v)) return {};
-      return ah * v;
+      float cells = id(jbd_cell_count).state;
+      if (isnan(ah) || isnan(cells) || cells <= 0) return {};
+      return cells * ah * 3.2f;
 
   # Énergie batterie chargée/déchargée cumulée (Wh) - compatible tableau de
   # bord Énergie de Home Assistant. Intégration temporelle de la puissance
